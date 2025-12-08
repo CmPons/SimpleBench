@@ -1,0 +1,17 @@
+[package]
+name = "simplebench-macros"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2.0", features = ["full"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+simplebench-runtime = { path = "../simplebench-runtime" }
+
+[dev-dependencies]
+simplebench-runtime = { path = "../simplebench-runtime" }
+tempfile = "3.0"

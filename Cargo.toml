@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "simplebench-runtime",
+    "simplebench-macros",
+]
+
+resolver = "2"
