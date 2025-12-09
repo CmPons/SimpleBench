@@ -1,0 +1,7 @@
+#! /usr/bin/env bash
+# This file is automatically sourced using the zsh chpwd hook.
+# Enter a development shell automatically
+
+set -e
+
+nix develop

@@ -1,0 +1,15 @@
+[package]
+name = "test-runner"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "test-runner"
+path = "src/main.rs"
+
+[dependencies]
+simplebench-runtime = { path = "../../simplebench-runtime" }
+game-math = { path = "../game-math" }
+game-entities = { path = "../game-entities" }
+game-physics = { path = "../game-physics" }
+serde_json = "1.0"

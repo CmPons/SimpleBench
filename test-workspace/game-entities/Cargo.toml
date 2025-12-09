@@ -1,0 +1,11 @@
+[package]
+name = "game-entities"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+simplebench-runtime = { path = "../../simplebench-runtime" }
+simplebench-macros = { path = "../../simplebench-macros" }
+
+[lib]
+crate-type = ["rlib"]

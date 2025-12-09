@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = [
+    "game-math",
+    "game-entities",
+    "game-physics",
+    "test-runner",
+]
