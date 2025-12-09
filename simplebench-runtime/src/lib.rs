@@ -34,7 +34,6 @@ pub struct Comparison {
     pub current_p90: Duration,
     pub baseline_p90: Duration,
     pub percentage_change: f64,
-    pub is_regression: bool,
 }
 
 pub struct SimpleBench {
@@ -91,20 +90,17 @@ pub fn calculate_percentiles(timings: &[Duration]) -> Percentiles {
 pub fn compare_with_baseline(current: &BenchResult, baseline: &BenchResult) -> Comparison {
     let current_p90_nanos = current.percentiles.p90.as_nanos() as f64;
     let baseline_p90_nanos = baseline.percentiles.p90.as_nanos() as f64;
-    
+
     let percentage_change = if baseline_p90_nanos > 0.0 {
         ((current_p90_nanos - baseline_p90_nanos) / baseline_p90_nanos) * 100.0
     } else {
         0.0
     };
-    
-    let is_regression = percentage_change > 10.0; // 10% threshold
-    
+
     Comparison {
         current_p90: current.percentiles.p90,
         baseline_p90: baseline.percentiles.p90,
         percentage_change,
-        is_regression,
     }
 }
 
@@ -217,11 +213,10 @@ mod tests {
         };
         
         let comparison = compare_with_baseline(&current, &baseline);
-        
+
         assert_eq!(comparison.percentage_change, 0.0);
-        assert!(!comparison.is_regression);
     }
-    
+
     #[test]
     fn test_compare_with_baseline_regression() {
         let baseline = BenchResult {
@@ -251,11 +246,10 @@ mod tests {
         };
         
         let comparison = compare_with_baseline(&current, &baseline);
-        
+
         assert_eq!(comparison.percentage_change, 20.0);
-        assert!(comparison.is_regression); // 20% > 10% threshold
     }
-    
+
     #[test]
     fn test_compare_with_baseline_improvement() {
         let baseline = BenchResult {
@@ -285,9 +279,8 @@ mod tests {
         };
         
         let comparison = compare_with_baseline(&current, &baseline);
-        
+
         assert_eq!(comparison.percentage_change, -20.0);
-        assert!(!comparison.is_regression); // Improvement, not regression
     }
     
     inventory::submit! {

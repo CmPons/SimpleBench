@@ -112,7 +112,6 @@ fn test_comparison_functionality() {
     let comparison = compare_with_baseline(&current, &baseline);
 
     assert_eq!(comparison.percentage_change, 30.0);
-    assert!(comparison.is_regression);
 }
 
 #[test]

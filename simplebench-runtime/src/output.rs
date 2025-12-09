@@ -60,13 +60,13 @@ pub fn format_benchmark_result(result: &BenchResult) -> String {
     )
 }
 
-pub fn format_comparison_result(comparison: &Comparison, benchmark_name: &str) -> String {
+pub fn format_comparison_result(comparison: &Comparison, benchmark_name: &str, is_regression: bool) -> String {
     let change_symbol = if comparison.percentage_change > 0.0 { "↗" } else { "↘" };
     let percentage_str = format!("{:.1}%", comparison.percentage_change.abs());
     let baseline_str = format_duration_human_readable(comparison.baseline_p90);
     let current_str = format_duration_human_readable(comparison.current_p90);
 
-    if comparison.is_regression {
+    if is_regression {
         format!(
             "        {} {} {} {} ({} -> {})",
             "REGRESS".red().bold(),
@@ -125,7 +125,7 @@ pub fn print_summary(results: &[BenchResult], comparisons: Option<&[ComparisonRe
         if let Some(comparisons) = comparisons {
             if i < comparisons.len() {
                 if let Some(comparison) = &comparisons[i].comparison {
-                    println!("{}", format_comparison_result(comparison, &result.name));
+                    println!("{}", format_comparison_result(comparison, &result.name, comparisons[i].is_regression));
                 } else {
                     // First run - no baseline to compare against
                     println!("        {} {} (establishing baseline)",
