@@ -2,6 +2,7 @@
 members = [
     "simplebench-runtime",
     "simplebench-macros",
+    "cargo-simplebench",
 ]
 
 resolver = "2"

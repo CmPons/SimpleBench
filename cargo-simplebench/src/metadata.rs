@@ -1,0 +1,69 @@
+use anyhow::{Context, Result};
+use cargo_metadata::{MetadataCommand, Package};
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone)]
+pub struct WorkspaceInfo {
+    pub root: PathBuf,
+    pub target_directory: PathBuf,
+    pub benchmark_crates: Vec<BenchmarkCrate>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BenchmarkCrate {
+    pub name: String,
+    pub manifest_path: PathBuf,
+}
+
+/// Parse workspace metadata and identify benchmark crates
+pub fn analyze_workspace(workspace_root: &Path) -> Result<WorkspaceInfo> {
+    let metadata = MetadataCommand::new()
+        .current_dir(workspace_root)
+        .exec()
+        .context("Failed to execute cargo metadata")?;
+
+    let target_directory = metadata.target_directory.clone().into_std_path_buf();
+
+    // Find all workspace member packages
+    let workspace_member_ids: HashSet<_> = metadata.workspace_members.iter().collect();
+
+    let mut benchmark_crates = Vec::new();
+
+    for package in &metadata.packages {
+        // Only consider workspace members
+        if !workspace_member_ids.contains(&package.id) {
+            continue;
+        }
+
+        // Check if this package depends on simplebench-runtime and has a lib target
+        if depends_on_simplebench_runtime(package) && has_lib_target(package) {
+            benchmark_crates.push(BenchmarkCrate {
+                name: package.name.clone(),
+                manifest_path: package.manifest_path.clone().into_std_path_buf(),
+            });
+        }
+    }
+
+    Ok(WorkspaceInfo {
+        root: workspace_root.to_path_buf(),
+        target_directory,
+        benchmark_crates,
+    })
+}
+
+/// Check if a package depends on simplebench-runtime
+fn depends_on_simplebench_runtime(package: &Package) -> bool {
+    package.dependencies.iter().any(|dep| {
+        dep.name == "simplebench-runtime" || dep.name == "simplebench_runtime"
+    })
+}
+
+/// Check if a package has a library target (rlib/lib)
+fn has_lib_target(package: &Package) -> bool {
+    package.targets.iter().any(|target| {
+        target.kind.iter().any(|kind| {
+            kind == "lib" || kind == "rlib"
+        })
+    })
+}
