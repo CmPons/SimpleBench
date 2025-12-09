@@ -28,27 +28,23 @@ pub fn generate_runner(benchmark_crates: &[BenchmarkCrate]) -> String {
 
     // Add main function
     code.push_str("fn main() {\n");
-    code.push_str("    use simplebench_runtime::SimpleBench;\n\n");
+    code.push_str("    use simplebench_runtime::{run_all_benchmarks, print_summary};\n\n");
 
-    code.push_str("    // Collect all registered benchmarks\n");
-    code.push_str("    let benchmarks: Vec<&SimpleBench> = inventory::iter::<SimpleBench>().collect();\n\n");
+    code.push_str("    println!(\"Running benchmarks...\\n\");\n\n");
 
-    code.push_str("    println!(\"Found {} benchmarks:\\n\", benchmarks.len());\n\n");
+    code.push_str("    // Run all benchmarks with proper measurements\n");
+    code.push_str("    let results = run_all_benchmarks(100, 100);\n\n");
 
-    code.push_str("    if benchmarks.is_empty() {\n");
+    code.push_str("    if results.is_empty() {\n");
     code.push_str("        eprintln!(\"ERROR: No benchmarks found!\");\n");
     code.push_str("        eprintln!(\"Make sure your benchmark functions are marked with #[mbench]\");\n");
     code.push_str("        std::process::exit(1);\n");
     code.push_str("    }\n\n");
 
-    code.push_str("    // Run each benchmark\n");
-    code.push_str("    for bench in &benchmarks {\n");
-    code.push_str("        println!(\"Running: {}::{}\", bench.module, bench.name);\n");
-    code.push_str("        (bench.func)();\n");
-    code.push_str("        println!(\"  [PASSED]\\n\");\n");
-    code.push_str("    }\n\n");
+    code.push_str("    // Display formatted results with timing data\n");
+    code.push_str("    print_summary(&results, None);\n\n");
 
-    code.push_str("    println!(\"\\nAll {} benchmarks completed successfully.\", benchmarks.len());\n");
+    code.push_str("    println!(\"\\n✓ All {} benchmarks completed successfully.\", results.len());\n");
     code.push_str("}\n");
 
     code
