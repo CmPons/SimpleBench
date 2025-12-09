@@ -1,14 +1,22 @@
 use std::time::{Duration, Instant};
 use crate::{BenchResult, calculate_percentiles};
 
-pub fn measure_with_warmup<F>(name: String, module: String, func: F, iterations: usize, samples: usize) -> BenchResult
+pub fn measure_with_warmup<F>(
+    name: String,
+    module: String,
+    func: F,
+    iterations: usize,
+    samples: usize,
+    warmup_iterations: usize,
+) -> BenchResult
 where
     F: Fn(),
 {
-    for _ in 0..10 {
+    // Warmup phase
+    for _ in 0..warmup_iterations {
         func();
     }
-    
+
     measure_function_impl(name, module, func, iterations, samples)
 }
 

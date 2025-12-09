@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
 use crate::{BenchResult, Percentiles};
+use crate::config::ComparisonConfig;
 
 /// Get the MAC address of the primary network interface and hash it for privacy
 ///
@@ -190,35 +191,6 @@ impl BaselineManager {
 impl Default for BaselineManager {
     fn default() -> Self {
         Self::new().expect("Failed to get primary MAC address")
-    }
-}
-
-/// Configuration for baseline comparison
-#[derive(Debug, Clone)]
-pub struct ComparisonConfig {
-    pub ci_mode: bool,
-    pub threshold: f64,
-}
-
-impl Default for ComparisonConfig {
-    fn default() -> Self {
-        Self {
-            ci_mode: false,
-            threshold: 5.0,
-        }
-    }
-}
-
-impl ComparisonConfig {
-    /// Create config from environment variables
-    pub fn from_env() -> Self {
-        let ci_mode = std::env::var("SIMPLEBENCH_CI").is_ok();
-        let threshold = std::env::var("SIMPLEBENCH_THRESHOLD")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(5.0);
-
-        Self { ci_mode, threshold }
     }
 }
 

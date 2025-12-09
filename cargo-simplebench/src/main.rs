@@ -21,8 +21,24 @@ struct Args {
     ci: bool,
 
     /// Regression threshold percentage (default: 5.0)
-    #[arg(long, default_value = "5.0")]
-    threshold: f64,
+    #[arg(long)]
+    threshold: Option<f64>,
+
+    /// Number of timing samples per benchmark (default: 200)
+    #[arg(long)]
+    samples: Option<usize>,
+
+    /// Number of iterations per sample (default: auto-scale)
+    #[arg(long)]
+    iterations: Option<usize>,
+
+    /// Number of warmup iterations (default: 50)
+    #[arg(long)]
+    warmup_iterations: Option<usize>,
+
+    /// Target sample duration in milliseconds for auto-scaling (default: 10)
+    #[arg(long)]
+    target_duration_ms: Option<u64>,
 
     /// Workspace root directory (default: current directory)
     #[arg(long)]
@@ -116,12 +132,33 @@ fn main() -> Result<()> {
     let mut cmd = Command::new(&runner_binary);
     cmd.env("CLICOLOR_FORCE", "1");
 
-    // Pass CI mode and threshold to runner via environment variables
+    // Pass workspace root for baseline storage
+    cmd.env("SIMPLEBENCH_WORKSPACE_ROOT", workspace_root.display().to_string());
+
+    // Pass CLI overrides as environment variables
     if cli_args.ci {
         cmd.env("SIMPLEBENCH_CI", "1");
     }
-    cmd.env("SIMPLEBENCH_THRESHOLD", cli_args.threshold.to_string());
-    cmd.env("SIMPLEBENCH_WORKSPACE_ROOT", workspace_root.display().to_string());
+
+    if let Some(threshold) = cli_args.threshold {
+        cmd.env("SIMPLEBENCH_THRESHOLD", threshold.to_string());
+    }
+
+    if let Some(samples) = cli_args.samples {
+        cmd.env("SIMPLEBENCH_SAMPLES", samples.to_string());
+    }
+
+    if let Some(iterations) = cli_args.iterations {
+        cmd.env("SIMPLEBENCH_ITERATIONS", iterations.to_string());
+    }
+
+    if let Some(warmup) = cli_args.warmup_iterations {
+        cmd.env("SIMPLEBENCH_WARMUP_ITERATIONS", warmup.to_string());
+    }
+
+    if let Some(duration) = cli_args.target_duration_ms {
+        cmd.env("SIMPLEBENCH_TARGET_DURATION_MS", duration.to_string());
+    }
 
     let status = cmd.status()
         .context("Failed to execute runner")?;

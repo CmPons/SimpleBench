@@ -4,10 +4,12 @@ use serde::{Deserialize, Serialize};
 pub mod measurement;
 pub mod output;
 pub mod baseline;
+pub mod config;
 
 pub use measurement::*;
 pub use output::*;
 pub use baseline::*;
+pub use config::*;
 
 // Re-export inventory for use by the macro
 pub use inventory;
@@ -106,7 +108,7 @@ pub fn compare_with_baseline(current: &BenchResult, baseline: &BenchResult) -> C
 
 pub fn run_all_benchmarks(iterations: usize, samples: usize) -> Vec<BenchResult> {
     let mut results = Vec::new();
-    
+
     for bench in inventory::iter::<SimpleBench> {
         let result = measure_function(
             bench.name.to_string(),
@@ -117,7 +119,39 @@ pub fn run_all_benchmarks(iterations: usize, samples: usize) -> Vec<BenchResult>
         );
         results.push(result);
     }
-    
+
+    results
+}
+
+/// Run all benchmarks with configuration
+pub fn run_all_benchmarks_with_config(config: &crate::config::BenchmarkConfig) -> Vec<BenchResult> {
+    let mut results = Vec::new();
+
+    for bench in inventory::iter::<SimpleBench> {
+        let result = if let Some(fixed_iterations) = config.measurement.iterations {
+            // Use fixed iteration count
+            measure_with_warmup(
+                bench.name.to_string(),
+                bench.module.to_string(),
+                bench.func,
+                fixed_iterations,
+                config.measurement.samples,
+                config.measurement.warmup_iterations,
+            )
+        } else {
+            // For now, use fixed iterations of 100 (auto-scaling will be added in Task 3)
+            measure_with_warmup(
+                bench.name.to_string(),
+                bench.module.to_string(),
+                bench.func,
+                100,
+                config.measurement.samples,
+                config.measurement.warmup_iterations,
+            )
+        };
+        results.push(result);
+    }
+
     results
 }
 
