@@ -1,11 +1,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
+use sha2::{Sha256, Digest};
 use crate::{BenchResult, Percentiles};
 
-/// Get the MAC address of the primary network interface (the one with default route)
+/// Get the MAC address of the primary network interface and hash it for privacy
 ///
-/// Returns the MAC address formatted with dashes (e.g., "aa-bb-cc-dd-ee-ff")
+/// Returns a SHA256 hash (first 16 hex characters) of the MAC address to serve as
+/// a stable machine identifier without exposing the actual MAC address.
 fn get_primary_mac_address() -> Result<String, std::io::Error> {
     let interface = default_net::get_default_interface()
         .map_err(|e| std::io::Error::new(
@@ -21,7 +23,22 @@ fn get_primary_mac_address() -> Result<String, std::io::Error> {
 
     // Format as lowercase with dashes: aa-bb-cc-dd-ee-ff
     // The default format uses colons, so replace them with dashes
-    Ok(format!("{}", mac_addr).replace(':', "-").to_lowercase())
+    let mac_string = format!("{}", mac_addr).replace(':', "-").to_lowercase();
+
+    // Hash the MAC address for privacy protection
+    hash_mac_address(&mac_string)
+}
+
+/// Hash a MAC address using SHA256 for privacy protection
+///
+/// Returns the first 16 characters of the hex digest as a stable machine identifier
+fn hash_mac_address(mac: &str) -> Result<String, std::io::Error> {
+    let mut hasher = Sha256::new();
+    hasher.update(mac.as_bytes());
+    let result = hasher.finalize();
+
+    // Use first 16 characters of hex digest (64 bits of entropy)
+    Ok(format!("{:x}", result)[..16].to_string())
 }
 
 /// Storage format for baseline benchmark results
@@ -310,7 +327,7 @@ mod tests {
     #[test]
     fn test_baseline_data_conversion() {
         let result = create_test_result("test_bench");
-        let machine_id = "aa-bb-cc-dd-ee-ff".to_string();
+        let machine_id = "0123456789abcdef".to_string(); // 16-char hex hash
 
         let baseline = BaselineData::from_bench_result(&result, machine_id.clone());
 
@@ -388,29 +405,21 @@ mod tests {
 
     #[test]
     fn test_get_primary_mac_address() {
-        // Test that we can get a MAC address
+        // Test that we can get a hashed machine ID
         let result = get_primary_mac_address();
 
         // Should succeed on systems with network interfaces
-        assert!(result.is_ok(), "Failed to get MAC address: {:?}", result);
+        assert!(result.is_ok(), "Failed to get machine ID: {:?}", result);
 
-        let mac = result.unwrap();
+        let machine_id = result.unwrap();
 
-        // Should be formatted with dashes
-        assert!(mac.contains('-'), "MAC address should contain dashes: {}", mac);
+        // Should be 16 characters (first 16 chars of SHA256 hex digest)
+        assert_eq!(machine_id.len(), 16, "Machine ID should be 16 characters: {}", machine_id);
 
-        // Should be lowercase
-        assert_eq!(mac, mac.to_lowercase(), "MAC address should be lowercase");
-
-        // Should match pattern: xx-xx-xx-xx-xx-xx (6 groups of 2 hex chars)
-        let parts: Vec<&str> = mac.split('-').collect();
-        assert_eq!(parts.len(), 6, "MAC address should have 6 groups separated by dashes");
-
-        for part in parts {
-            assert_eq!(part.len(), 2, "Each MAC address group should be 2 characters");
-            assert!(part.chars().all(|c| c.is_ascii_hexdigit()),
-                    "MAC address should contain only hex digits");
-        }
+        // Should be lowercase hex
+        assert_eq!(machine_id, machine_id.to_lowercase(), "Machine ID should be lowercase");
+        assert!(machine_id.chars().all(|c| c.is_ascii_hexdigit()),
+                "Machine ID should contain only hex digits");
     }
 
     #[test]
@@ -421,8 +430,9 @@ mod tests {
 
         let manager = manager_result.unwrap();
 
-        // Verify machine_id is properly formatted
-        assert!(manager.machine_id.contains('-'));
+        // Verify machine_id is properly formatted (16 character hex hash)
+        assert_eq!(manager.machine_id.len(), 16, "Machine ID should be 16 characters");
         assert_eq!(manager.machine_id, manager.machine_id.to_lowercase());
+        assert!(manager.machine_id.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }
