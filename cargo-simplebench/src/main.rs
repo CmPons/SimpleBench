@@ -4,21 +4,45 @@ mod runner_gen;
 mod compile;
 
 use anyhow::{Context, Result};
+use clap::Parser;
 use colored::*;
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
+/// SimpleBench - Simple microbenchmarking for Rust
+#[derive(Parser, Debug)]
+#[command(name = "cargo-simplebench")]
+#[command(bin_name = "cargo simplebench")]
+#[command(version, about, long_about = None)]
+struct Args {
+    /// Enable CI mode: fail on performance regressions
+    #[arg(long)]
+    ci: bool,
+
+    /// Regression threshold percentage (default: 5.0)
+    #[arg(long, default_value = "5.0")]
+    threshold: f64,
+
+    /// Workspace root directory (default: current directory)
+    #[arg(long)]
+    workspace_root: Option<PathBuf>,
+}
+
 fn main() -> Result<()> {
     // Handle cargo invocation: `cargo simplebench` passes "simplebench" as first arg
-    let args: Vec<String> = env::args().collect();
+    let mut args: Vec<String> = env::args().collect();
     if args.len() > 1 && args[1] == "simplebench" {
-        // Called as `cargo simplebench` - skip the "simplebench" argument
+        // Called as `cargo simplebench` - remove the "simplebench" argument
+        args.remove(1);
     }
 
-    // Determine workspace root (current directory)
-    let workspace_root = env::current_dir()
-        .context("Failed to get current directory")?;
+    // Parse arguments
+    let cli_args = Args::parse_from(args);
+
+    // Determine workspace root
+    let workspace_root = cli_args.workspace_root
+        .unwrap_or_else(|| env::current_dir().expect("Failed to get current directory"));
 
     // Step 1: Analyze workspace
     println!("{}", "Analyzing workspace...".green().bold());
@@ -89,13 +113,21 @@ fn main() -> Result<()> {
     // Step 5: Run benchmarks
     println!();
 
-    let status = Command::new(&runner_binary)
-        .env("CLICOLOR_FORCE", "1")
-        .status()
+    let mut cmd = Command::new(&runner_binary);
+    cmd.env("CLICOLOR_FORCE", "1");
+
+    // Pass CI mode and threshold to runner via environment variables
+    if cli_args.ci {
+        cmd.env("SIMPLEBENCH_CI", "1");
+    }
+    cmd.env("SIMPLEBENCH_THRESHOLD", cli_args.threshold.to_string());
+    cmd.env("SIMPLEBENCH_WORKSPACE_ROOT", workspace_root.display().to_string());
+
+    let status = cmd.status()
         .context("Failed to execute runner")?;
 
     if !status.success() {
-        anyhow::bail!("Runner execution failed");
+        std::process::exit(1);
     }
 
     Ok(())

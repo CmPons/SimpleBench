@@ -28,9 +28,26 @@ pub fn generate_runner(benchmark_crates: &[BenchmarkCrate]) -> String {
 
     // Add main function
     code.push_str("fn main() {\n");
-    code.push_str("    use simplebench_runtime::{run_all_benchmarks, print_summary};\n\n");
+    code.push_str("    use simplebench_runtime::{\n");
+    code.push_str("        run_all_benchmarks,\n");
+    code.push_str("        print_summary,\n");
+    code.push_str("        ComparisonConfig,\n");
+    code.push_str("        process_with_baselines,\n");
+    code.push_str("        check_regressions_and_exit,\n");
+    code.push_str("    };\n\n");
 
-    code.push_str("    // Run all benchmarks with proper measurements\n");
+    code.push_str("    // Change to workspace root for baseline storage\n");
+    code.push_str("    if let Ok(workspace_root) = std::env::var(\"SIMPLEBENCH_WORKSPACE_ROOT\") {\n");
+    code.push_str("        if let Err(e) = std::env::set_current_dir(&workspace_root) {\n");
+    code.push_str("            eprintln!(\"Failed to change to workspace root: {}\", e);\n");
+    code.push_str("            std::process::exit(1);\n");
+    code.push_str("        }\n");
+    code.push_str("    }\n\n");
+
+    code.push_str("    // Load configuration from environment\n");
+    code.push_str("    let config = ComparisonConfig::from_env();\n\n");
+
+    code.push_str("    // Run all benchmarks\n");
     code.push_str("    let results = run_all_benchmarks(100, 100);\n\n");
 
     code.push_str("    if results.is_empty() {\n");
@@ -39,8 +56,21 @@ pub fn generate_runner(benchmark_crates: &[BenchmarkCrate]) -> String {
     code.push_str("        std::process::exit(1);\n");
     code.push_str("    }\n\n");
 
-    code.push_str("    // Display formatted results with timing data\n");
-    code.push_str("    print_summary(&results, None);\n");
+    code.push_str("    // Process with baselines\n");
+    code.push_str("    let comparisons = match process_with_baselines(&results, &config) {\n");
+    code.push_str("        Ok(c) => c,\n");
+    code.push_str("        Err(e) => {\n");
+    code.push_str("            eprintln!(\"Warning: Failed to process baselines: {}\", e);\n");
+    code.push_str("            print_summary(&results, None);\n");
+    code.push_str("            return;\n");
+    code.push_str("        }\n");
+    code.push_str("    };\n\n");
+
+    code.push_str("    // Display results\n");
+    code.push_str("    print_summary(&results, Some(&comparisons));\n\n");
+
+    code.push_str("    // Check for regressions and exit if in CI mode\n");
+    code.push_str("    check_regressions_and_exit(&comparisons, &config);\n");
     code.push_str("}\n");
 
     code

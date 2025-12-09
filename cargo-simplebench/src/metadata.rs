@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
 pub struct WorkspaceInfo {
-    pub root: PathBuf,
     pub target_directory: PathBuf,
     pub benchmark_crates: Vec<BenchmarkCrate>,
 }
@@ -13,7 +12,6 @@ pub struct WorkspaceInfo {
 #[derive(Debug, Clone)]
 pub struct BenchmarkCrate {
     pub name: String,
-    pub manifest_path: PathBuf,
 }
 
 /// Parse workspace metadata and identify benchmark crates
@@ -40,13 +38,11 @@ pub fn analyze_workspace(workspace_root: &Path) -> Result<WorkspaceInfo> {
         if depends_on_simplebench_runtime(package) && has_lib_target(package) {
             benchmark_crates.push(BenchmarkCrate {
                 name: package.name.clone(),
-                manifest_path: package.manifest_path.clone().into_std_path_buf(),
             });
         }
     }
 
     Ok(WorkspaceInfo {
-        root: workspace_root.to_path_buf(),
         target_directory,
         benchmark_crates,
     })

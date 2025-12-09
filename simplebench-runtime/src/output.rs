@@ -3,6 +3,7 @@ use std::path::Path;
 use serde_json;
 use colored::*;
 use crate::{BenchResult, Comparison};
+use crate::baseline::ComparisonResult;
 
 pub fn save_result_to_file<P: AsRef<Path>>(result: &BenchResult, path: P) -> Result<(), Box<dyn std::error::Error>> {
     let json = serde_json::to_string_pretty(result)?;
@@ -108,7 +109,7 @@ pub fn print_benchmark_start(bench_name: &str, module: &str) {
     );
 }
 
-pub fn print_summary(results: &[BenchResult], comparisons: Option<&[Comparison]>) {
+pub fn print_summary(results: &[BenchResult], comparisons: Option<&[ComparisonResult]>) {
     // Print header
     println!("{} {} {}",
         "Running".green().bold(),
@@ -123,7 +124,15 @@ pub fn print_summary(results: &[BenchResult], comparisons: Option<&[Comparison]>
 
         if let Some(comparisons) = comparisons {
             if i < comparisons.len() {
-                println!("{}", format_comparison_result(&comparisons[i], &result.name));
+                if let Some(comparison) = &comparisons[i].comparison {
+                    println!("{}", format_comparison_result(comparison, &result.name));
+                } else {
+                    // First run - no baseline to compare against
+                    println!("        {} {} (establishing baseline)",
+                        "NEW".blue().bold(),
+                        result.name.bright_white()
+                    );
+                }
             }
         }
     }
@@ -133,10 +142,17 @@ pub fn print_summary(results: &[BenchResult], comparisons: Option<&[Comparison]>
     // Print summary footer
     if let Some(comparisons) = comparisons {
         let regressions = comparisons.iter().filter(|c| c.is_regression).count();
-        let improvements = comparisons.iter().filter(|c| c.percentage_change < -5.0 && !c.is_regression).count();
-        let stable = comparisons.len() - regressions - improvements;
+        let improvements = comparisons.iter()
+            .filter(|c| {
+                c.comparison.as_ref()
+                    .map(|comp| comp.percentage_change < -5.0)
+                    .unwrap_or(false)
+            })
+            .count();
+        let new_benchmarks = comparisons.iter().filter(|c| c.comparison.is_none()).count();
+        let stable = comparisons.len() - regressions - improvements - new_benchmarks;
 
-        println!("{} {} total: {} {}, {} {}, {} {}",
+        println!("{} {} total: {} {}, {} {}, {} {}{}",
             "Summary:".cyan().bold(),
             results.len(),
             stable,
@@ -144,7 +160,12 @@ pub fn print_summary(results: &[BenchResult], comparisons: Option<&[Comparison]>
             improvements,
             "improved".green(),
             regressions,
-            if regressions > 0 { "regressed".red().bold() } else { "regressed".dimmed() }
+            if regressions > 0 { "regressed".red().bold() } else { "regressed".dimmed() },
+            if new_benchmarks > 0 {
+                format!(", {} {}", new_benchmarks, "new".blue())
+            } else {
+                String::new()
+            }
         );
 
         if regressions > 0 {

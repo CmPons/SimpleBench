@@ -3,9 +3,11 @@ use serde::{Deserialize, Serialize};
 
 pub mod measurement;
 pub mod output;
+pub mod baseline;
 
 pub use measurement::*;
 pub use output::*;
+pub use baseline::*;
 
 // Re-export inventory for use by the macro
 pub use inventory;
