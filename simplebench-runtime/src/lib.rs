@@ -139,14 +139,14 @@ pub fn run_all_benchmarks_with_config(config: &crate::config::BenchmarkConfig) -
                 config.measurement.warmup_iterations,
             )
         } else {
-            // For now, use fixed iterations of 100 (auto-scaling will be added in Task 3)
-            measure_with_warmup(
+            // Use auto-scaling
+            measure_with_auto_iterations(
                 bench.name.to_string(),
                 bench.module.to_string(),
                 bench.func,
-                100,
                 config.measurement.samples,
                 config.measurement.warmup_iterations,
+                config.measurement.target_sample_duration_ms,
             )
         };
         results.push(result);
