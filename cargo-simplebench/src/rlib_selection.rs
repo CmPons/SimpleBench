@@ -18,12 +18,8 @@ pub struct RlibInfo {
 pub fn select_rlibs(workspace_root: &Path, profile: &str) -> Result<HashMap<String, PathBuf>> {
     // Try JSON parsing approach first (preferred)
     match select_rlibs_json(workspace_root, profile) {
-        Ok(rlibs) => {
-            eprintln!("Selected rlibs using JSON parsing (opt-level=3)");
-            Ok(rlibs)
-        }
-        Err(e) => {
-            eprintln!("JSON parsing failed ({}), falling back to file size heuristic", e);
+        Ok(rlibs) => Ok(rlibs),
+        Err(_e) => {
             // Fallback to file size heuristic
             let target_dir = workspace_root.join("target").join(profile).join("deps");
             select_rlibs_by_size(&target_dir)

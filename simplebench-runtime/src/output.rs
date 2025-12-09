@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::Path;
 use serde_json;
+use colored::*;
 use crate::{BenchResult, Comparison};
 
 pub fn save_result_to_file<P: AsRef<Path>>(result: &BenchResult, path: P) -> Result<(), Box<dyn std::error::Error>> {
@@ -42,55 +43,118 @@ pub fn format_duration_human_readable(duration: std::time::Duration) -> String {
 }
 
 pub fn format_benchmark_result(result: &BenchResult) -> String {
+    let bench_name = format!("{}::{}", result.module, result.name);
+    let p50_str = format_duration_human_readable(result.percentiles.p50);
+    let p90_str = format_duration_human_readable(result.percentiles.p90);
+    let p99_str = format_duration_human_readable(result.percentiles.p99);
+
     format!(
-        "{}::{} - p50: {}, p90: {}, p99: {} ({} samples × {} iterations)",
-        result.module,
-        result.name,
-        format_duration_human_readable(result.percentiles.p50),
-        format_duration_human_readable(result.percentiles.p90),
-        format_duration_human_readable(result.percentiles.p99),
-        result.samples,
-        result.iterations
+        "{} {} {} p50: {}, p90: {}, p99: {}",
+        "BENCH".green().bold(),
+        bench_name.cyan(),
+        format!("[{} samples × {} iters]", result.samples, result.iterations).dimmed(),
+        p50_str.cyan(),
+        p90_str.cyan(),
+        p99_str.cyan()
     )
 }
 
 pub fn format_comparison_result(comparison: &Comparison, benchmark_name: &str) -> String {
     let change_symbol = if comparison.percentage_change > 0.0 { "↗" } else { "↘" };
-    let change_color = if comparison.is_regression { "REGRESSION" } else { "OK" };
-    
-    format!(
-        "{} [{}] {} {:.1}% ({} -> {})",
-        benchmark_name,
-        change_color,
-        change_symbol,
-        comparison.percentage_change.abs(),
-        format_duration_human_readable(comparison.baseline_p90),
-        format_duration_human_readable(comparison.current_p90)
-    )
+    let percentage_str = format!("{:.1}%", comparison.percentage_change.abs());
+    let baseline_str = format_duration_human_readable(comparison.baseline_p90);
+    let current_str = format_duration_human_readable(comparison.current_p90);
+
+    if comparison.is_regression {
+        format!(
+            "        {} {} {} {} ({} -> {})",
+            "REGRESS".red().bold(),
+            benchmark_name.bright_white(),
+            change_symbol,
+            percentage_str.red().bold(),
+            baseline_str.dimmed(),
+            current_str.red()
+        )
+    } else if comparison.percentage_change < -5.0 {
+        // Show improvements of >5% in green
+        format!(
+            "        {} {} {} {} ({} -> {})",
+            "IMPROVE".green().bold(),
+            benchmark_name.bright_white(),
+            change_symbol,
+            percentage_str.green(),
+            baseline_str.dimmed(),
+            current_str.green()
+        )
+    } else {
+        // Minor changes in yellow
+        format!(
+            "        {} {} {} {} ({} -> {})",
+            "STABLE".yellow(),
+            benchmark_name.bright_white(),
+            change_symbol,
+            percentage_str.dimmed(),
+            baseline_str.dimmed(),
+            current_str.dimmed()
+        )
+    }
+}
+
+pub fn print_benchmark_start(bench_name: &str, module: &str) {
+    println!("   {} {}::{}",
+        "Running".cyan().bold(),
+        module.dimmed(),
+        bench_name
+    );
 }
 
 pub fn print_summary(results: &[BenchResult], comparisons: Option<&[Comparison]>) {
-    println!("SimpleBench Results:");
-    println!("===================");
-    
+    // Print header
+    println!("{} {} {}",
+        "Running".green().bold(),
+        results.len(),
+        "Benchmarks".green().bold()
+    );
+    println!();
+
+    // Print individual benchmark results
     for (i, result) in results.iter().enumerate() {
         println!("{}", format_benchmark_result(result));
-        
+
         if let Some(comparisons) = comparisons {
             if i < comparisons.len() {
-                println!("  {}", format_comparison_result(&comparisons[i], &result.name));
+                println!("{}", format_comparison_result(&comparisons[i], &result.name));
             }
         }
-        println!();
     }
-    
+
+    println!();
+
+    // Print summary footer
     if let Some(comparisons) = comparisons {
         let regressions = comparisons.iter().filter(|c| c.is_regression).count();
+        let improvements = comparisons.iter().filter(|c| c.percentage_change < -5.0 && !c.is_regression).count();
+        let stable = comparisons.len() - regressions - improvements;
+
+        println!("{} {} total: {} {}, {} {}, {} {}",
+            "Summary:".cyan().bold(),
+            results.len(),
+            stable,
+            "stable".dimmed(),
+            improvements,
+            "improved".green(),
+            regressions,
+            if regressions > 0 { "regressed".red().bold() } else { "regressed".dimmed() }
+        );
+
         if regressions > 0 {
-            println!("⚠️  {} regression(s) detected!", regressions);
-        } else {
-            println!("✅ No regressions detected");
+            println!("{} {} regression(s) detected", "warning:".yellow().bold(), regressions);
         }
+    } else {
+        println!("{} running {} benchmarks",
+            "Finished".green().bold(),
+            results.len()
+        );
     }
 }
 
@@ -154,11 +218,11 @@ mod tests {
     fn test_format_benchmark_result() {
         let result = create_test_result();
         let formatted = format_benchmark_result(&result);
-        
+
         assert!(formatted.contains("test_module::test_bench"));
         assert!(formatted.contains("p50:"));
         assert!(formatted.contains("p90:"));
         assert!(formatted.contains("p99:"));
-        assert!(formatted.contains("10 samples × 100 iterations"));
+        assert!(formatted.contains("10 samples × 100 iters"));
     }
 }

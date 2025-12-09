@@ -4,6 +4,7 @@ mod runner_gen;
 mod compile;
 
 use anyhow::{Context, Result};
+use colored::*;
 use std::env;
 use std::path::PathBuf;
 use std::process::Command;
@@ -19,33 +20,36 @@ fn main() -> Result<()> {
     let workspace_root = env::current_dir()
         .context("Failed to get current directory")?;
 
-    println!("SimpleBench - Workspace Benchmark Runner");
-    println!("=========================================\n");
-
     // Step 1: Analyze workspace
-    println!("Step 1: Analyzing workspace...");
+    println!("{}", "Analyzing workspace...".green().bold());
     let workspace_info = metadata::analyze_workspace(&workspace_root)
         .context("Failed to analyze workspace")?;
 
     if workspace_info.benchmark_crates.is_empty() {
-        eprintln!("ERROR: No benchmark crates found!");
-        eprintln!("Benchmark crates must depend on simplebench-runtime");
+        eprintln!("{}", "error: No benchmark crates found!".red().bold());
+        eprintln!("{}", "       Benchmark crates must depend on simplebench-runtime".dimmed());
         std::process::exit(1);
     }
 
-    println!("  Found {} benchmark crates:", workspace_info.benchmark_crates.len());
+    println!("     {} {} benchmark crates",
+        "Found".dimmed(),
+        workspace_info.benchmark_crates.len().to_string().green().bold()
+    );
     for crate_info in &workspace_info.benchmark_crates {
-        println!("    - {}", crate_info.name);
+        println!("       {} {}", "•".cyan(), crate_info.name);
     }
     println!();
 
     // Step 2: Build workspace and select rlibs
-    println!("Step 2: Building workspace with --release...");
+    println!("{}", "Compiling workspace (release profile)".green().bold());
     let profile = "release";
     let rlibs = rlib_selection::select_rlibs(&workspace_root, profile)
         .context("Failed to select rlibs")?;
 
-    println!("  Selected {} rlib files (opt-level=3)", rlibs.len());
+    println!("     {} {} rlib files",
+        "Selected".dimmed(),
+        rlibs.len().to_string().green()
+    );
     println!();
 
     // Verify required dependencies are present
@@ -65,43 +69,34 @@ fn main() -> Result<()> {
     }
 
     // Step 3: Generate runner
-    println!("Step 3: Generating runner...");
+    println!("{}", "Generating benchmark runner".green().bold());
     let runner_path = runner_gen::write_runner(
         &workspace_info.target_directory,
         &workspace_info.benchmark_crates,
     )
     .context("Failed to write runner")?;
-    println!("  Generated: {}", runner_path.display());
     println!();
 
     // Step 4: Compile runner
-    println!("Step 4: Compiling runner...");
+    println!("{}", "Compiling runner".green().bold());
     let runner_binary = workspace_info.target_directory.join("simplebench_runner");
     let deps_dir = workspace_info.target_directory.join(profile).join("deps");
 
     compile::compile_runner(&runner_path, &runner_binary, &rlibs, &deps_dir)
         .context("Failed to compile runner")?;
-    println!("  Compiled: {}", runner_binary.display());
     println!();
 
     // Step 5: Run benchmarks
-    println!("Step 5: Running benchmarks...");
-    println!("═══════════════════════════════════════\n");
+    println!();
 
-    let output = Command::new(&runner_binary)
-        .output()
+    let status = Command::new(&runner_binary)
+        .env("CLICOLOR_FORCE", "1")
+        .status()
         .context("Failed to execute runner")?;
 
-    // Print stdout and stderr
-    print!("{}", String::from_utf8_lossy(&output.stdout));
-    eprint!("{}", String::from_utf8_lossy(&output.stderr));
-
-    if !output.status.success() {
+    if !status.success() {
         anyhow::bail!("Runner execution failed");
     }
-
-    println!("\n═══════════════════════════════════════");
-    println!("SimpleBench completed successfully!");
 
     Ok(())
 }

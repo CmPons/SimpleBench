@@ -30,21 +30,17 @@ pub fn generate_runner(benchmark_crates: &[BenchmarkCrate]) -> String {
     code.push_str("fn main() {\n");
     code.push_str("    use simplebench_runtime::{run_all_benchmarks, print_summary};\n\n");
 
-    code.push_str("    println!(\"Running benchmarks...\\n\");\n\n");
-
     code.push_str("    // Run all benchmarks with proper measurements\n");
     code.push_str("    let results = run_all_benchmarks(100, 100);\n\n");
 
     code.push_str("    if results.is_empty() {\n");
     code.push_str("        eprintln!(\"ERROR: No benchmarks found!\");\n");
-    code.push_str("        eprintln!(\"Make sure your benchmark functions are marked with #[mbench]\");\n");
+    code.push_str("        eprintln!(\"Make sure your benchmark functions are marked with #[simplebench]\");\n");
     code.push_str("        std::process::exit(1);\n");
     code.push_str("    }\n\n");
 
     code.push_str("    // Display formatted results with timing data\n");
-    code.push_str("    print_summary(&results, None);\n\n");
-
-    code.push_str("    println!(\"\\n✓ All {} benchmarks completed successfully.\", results.len());\n");
+    code.push_str("    print_summary(&results, None);\n");
     code.push_str("}\n");
 
     code

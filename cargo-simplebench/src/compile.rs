@@ -33,11 +33,6 @@ pub fn compile_runner(
             .arg(format!("{}={}", crate_name, rlib_path.display()));
     }
 
-    eprintln!("Compiling runner with rustc...");
-    eprintln!("  Source: {}", runner_source.display());
-    eprintln!("  Output: {}", output_binary.display());
-    eprintln!("  Linked crates: {}", rlibs.len());
-
     let output = cmd
         .output()
         .context("Failed to execute rustc")?;
