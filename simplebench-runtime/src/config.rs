@@ -18,9 +18,15 @@ pub struct MeasurementConfig {
     pub warmup_iterations: usize,
 }
 
-fn default_samples() -> usize { 100_000 }
-fn default_iterations() -> usize { 5 }
-fn default_warmup_iterations() -> usize { 50 }
+fn default_samples() -> usize {
+    1000
+}
+fn default_iterations() -> usize {
+    1000
+}
+fn default_warmup_iterations() -> usize {
+    100_000
+}
 
 impl Default for MeasurementConfig {
     fn default() -> Self {
@@ -44,7 +50,9 @@ pub struct ComparisonConfig {
     pub ci_mode: bool,
 }
 
-fn default_threshold() -> f64 { 5.0 }
+fn default_threshold() -> f64 {
+    5.0
+}
 
 impl Default for ComparisonConfig {
     fn default() -> Self {

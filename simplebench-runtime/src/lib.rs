@@ -250,7 +250,11 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
     use colored::*;
 
     match affinity::set_thread_affinity([0]) {
-        Ok(_) => println!("{}\n", "Set affinity to core 0".green().bold()),
+        Ok(_) => println!(
+            "{} {}\n",
+            "Set affinity to core".green().bold(),
+            "0".cyan().bold()
+        ),
         Err(e) => println!("Failed to set core affinity {e:?}"),
     };
 
@@ -268,10 +272,12 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
     };
 
     println!(
-        "{} benchmarks with {} samples × {} iterations\n",
-        "Running".green().bold(),
+        "{} {} {} {} {}\n",
+        "Running benchmarks with".green().bold(),
         config.measurement.samples,
-        config.measurement.iterations
+        "samples ×".green().bold(),
+        config.measurement.iterations,
+        "iterations".green().bold()
     );
 
     // Run each benchmark and print immediately
@@ -532,4 +538,3 @@ mod tests {
         assert!(found_test_bench);
     }
 }
-
