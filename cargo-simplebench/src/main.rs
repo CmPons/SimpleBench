@@ -1,7 +1,7 @@
+mod compile;
 mod metadata;
 mod rlib_selection;
 mod runner_gen;
-mod compile;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -57,23 +57,33 @@ fn main() -> Result<()> {
     let cli_args = Args::parse_from(args);
 
     // Determine workspace root
-    let workspace_root = cli_args.workspace_root
+    let workspace_root = cli_args
+        .workspace_root
         .unwrap_or_else(|| env::current_dir().expect("Failed to get current directory"));
 
     // Step 1: Analyze workspace
     println!("{}", "Analyzing workspace...".green().bold());
-    let workspace_info = metadata::analyze_workspace(&workspace_root)
-        .context("Failed to analyze workspace")?;
+    let workspace_info =
+        metadata::analyze_workspace(&workspace_root).context("Failed to analyze workspace")?;
 
     if workspace_info.benchmark_crates.is_empty() {
         eprintln!("{}", "error: No benchmark crates found!".red().bold());
-        eprintln!("{}", "       Benchmark crates must depend on simplebench-runtime".dimmed());
+        eprintln!(
+            "{}",
+            "       Benchmark crates must depend on simplebench-runtime".dimmed()
+        );
         std::process::exit(1);
     }
 
-    println!("     {} {} benchmark crates",
+    println!(
+        "     {} {} benchmark crates",
         "Found".dimmed(),
-        workspace_info.benchmark_crates.len().to_string().green().bold()
+        workspace_info
+            .benchmark_crates
+            .len()
+            .to_string()
+            .green()
+            .bold()
     );
     for crate_info in &workspace_info.benchmark_crates {
         println!("       {} {}", "•".cyan(), crate_info.name);
@@ -83,10 +93,11 @@ fn main() -> Result<()> {
     // Step 2: Build workspace and select rlibs
     println!("{}", "Compiling workspace (release profile)".green().bold());
     let profile = "release";
-    let rlibs = rlib_selection::select_rlibs(&workspace_root, profile)
-        .context("Failed to select rlibs")?;
+    let rlibs =
+        rlib_selection::select_rlibs(&workspace_root, profile).context("Failed to select rlibs")?;
 
-    println!("     {} {} rlib files",
+    println!(
+        "     {} {} rlib files",
         "Selected".dimmed(),
         rlibs.len().to_string().green()
     );
@@ -124,7 +135,6 @@ fn main() -> Result<()> {
 
     compile::compile_runner(&runner_path, &runner_binary, &rlibs, &deps_dir)
         .context("Failed to compile runner")?;
-    println!();
 
     // Step 5: Run benchmarks
     println!();
@@ -133,7 +143,10 @@ fn main() -> Result<()> {
     cmd.env("CLICOLOR_FORCE", "1");
 
     // Pass workspace root for baseline storage
-    cmd.env("SIMPLEBENCH_WORKSPACE_ROOT", workspace_root.display().to_string());
+    cmd.env(
+        "SIMPLEBENCH_WORKSPACE_ROOT",
+        workspace_root.display().to_string(),
+    );
 
     // Pass CLI overrides as environment variables
     if cli_args.ci {
@@ -160,8 +173,7 @@ fn main() -> Result<()> {
         cmd.env("SIMPLEBENCH_TARGET_DURATION_MS", duration.to_string());
     }
 
-    let status = cmd.status()
-        .context("Failed to execute runner")?;
+    let status = cmd.status().context("Failed to execute runner")?;
 
     if !status.success() {
         std::process::exit(1);

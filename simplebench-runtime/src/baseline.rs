@@ -291,6 +291,7 @@ mod tests {
                 p50: Duration::from_millis(5),
                 p90: Duration::from_millis(10),
                 p99: Duration::from_millis(15),
+                mean: Duration::from_millis(8),
             },
             all_timings: vec![],
         }

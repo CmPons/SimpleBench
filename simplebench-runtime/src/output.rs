@@ -45,30 +45,32 @@ pub fn format_duration_human_readable(duration: std::time::Duration) -> String {
 
 pub fn format_benchmark_result(result: &BenchResult) -> String {
     let bench_name = format!("{}::{}", result.module, result.name);
+    let mean_str = format_duration_human_readable(result.percentiles.mean);
     let p50_str = format_duration_human_readable(result.percentiles.p50);
     let p90_str = format_duration_human_readable(result.percentiles.p90);
     let p99_str = format_duration_human_readable(result.percentiles.p99);
 
     format!(
-        "{} {} {} p50: {}, p90: {}, p99: {}",
+        "{} {} {} mean: {}, p50: {}, p90: {}, p99: {}",
         "BENCH".green().bold(),
         bench_name.cyan(),
         format!("[{} samples × {} iters]", result.samples, result.iterations).dimmed(),
-        p50_str.cyan(),
-        p90_str.cyan(),
-        p99_str.cyan()
+        mean_str.cyan().bold(),
+        p50_str.dimmed(),
+        p90_str.dimmed(),
+        p99_str.dimmed()
     )
 }
 
 pub fn format_comparison_result(comparison: &Comparison, benchmark_name: &str, is_regression: bool) -> String {
     let change_symbol = if comparison.percentage_change > 0.0 { "↗" } else { "↘" };
     let percentage_str = format!("{:.1}%", comparison.percentage_change.abs());
-    let baseline_str = format_duration_human_readable(comparison.baseline_p90);
-    let current_str = format_duration_human_readable(comparison.current_p90);
+    let baseline_str = format_duration_human_readable(comparison.baseline_mean);
+    let current_str = format_duration_human_readable(comparison.current_mean);
 
     if is_regression {
         format!(
-            "        {} {} {} {} ({} -> {})",
+            "        {} {} {} {} (mean: {} -> {})",
             "REGRESS".red().bold(),
             benchmark_name.bright_white(),
             change_symbol,
@@ -79,7 +81,7 @@ pub fn format_comparison_result(comparison: &Comparison, benchmark_name: &str, i
     } else if comparison.percentage_change < -5.0 {
         // Show improvements of >5% in green
         format!(
-            "        {} {} {} {} ({} -> {})",
+            "        {} {} {} {} (mean: {} -> {})",
             "IMPROVE".green().bold(),
             benchmark_name.bright_white(),
             change_symbol,
@@ -90,7 +92,7 @@ pub fn format_comparison_result(comparison: &Comparison, benchmark_name: &str, i
     } else {
         // Minor changes in yellow
         format!(
-            "        {} {} {} {} ({} -> {})",
+            "        {} {} {} {} (mean: {} -> {})",
             "STABLE".yellow(),
             benchmark_name.bright_white(),
             change_symbol,
@@ -107,6 +109,63 @@ pub fn print_benchmark_start(bench_name: &str, module: &str) {
         module.dimmed(),
         bench_name
     );
+}
+
+/// Print a single benchmark result line (for streaming output)
+pub fn print_benchmark_result_line(result: &BenchResult) {
+    println!("{}", format_benchmark_result(result));
+}
+
+/// Print a single comparison line (for streaming output)
+pub fn print_comparison_line(comparison: &Comparison, benchmark_name: &str, is_regression: bool) {
+    println!("{}", format_comparison_result(comparison, benchmark_name, is_regression));
+}
+
+/// Print "NEW" message for first baseline
+pub fn print_new_baseline_line(benchmark_name: &str) {
+    println!("        {} {} (establishing baseline)",
+        "NEW".blue().bold(),
+        benchmark_name.bright_white()
+    );
+}
+
+/// Print summary footer for streaming mode
+pub fn print_streaming_summary(comparisons: &[ComparisonResult], config: &crate::config::ComparisonConfig) {
+    let regressions = comparisons.iter().filter(|c| c.is_regression).count();
+    let improvements = comparisons.iter()
+        .filter(|c| {
+            c.comparison.as_ref()
+                .map(|comp| comp.percentage_change < -5.0)
+                .unwrap_or(false)
+        })
+        .count();
+    let new_benchmarks = comparisons.iter().filter(|c| c.comparison.is_none()).count();
+    let stable = comparisons.len() - regressions - improvements - new_benchmarks;
+
+    println!("{}", "─".repeat(80).dimmed());
+    println!("{} {} total: {} {}, {} {}, {} {}{}",
+        "Summary:".cyan().bold(),
+        comparisons.len(),
+        stable,
+        "stable".dimmed(),
+        improvements,
+        "improved".green(),
+        regressions,
+        if regressions > 0 { "regressed".red().bold() } else { "regressed".dimmed() },
+        if new_benchmarks > 0 {
+            format!(", {} {}", new_benchmarks, "new".blue())
+        } else {
+            String::new()
+        }
+    );
+
+    if regressions > 0 {
+        println!("{} {} regression(s) detected (threshold: {}%)",
+            "Warning:".yellow().bold(),
+            regressions,
+            config.threshold
+        );
+    }
 }
 
 pub fn print_summary(results: &[BenchResult], comparisons: Option<&[ComparisonResult]>) {
@@ -196,6 +255,7 @@ mod tests {
                 p50: Duration::from_millis(5),
                 p90: Duration::from_millis(10),
                 p99: Duration::from_millis(15),
+                mean: Duration::from_millis(8),
             },
             all_timings: vec![Duration::from_millis(5); 10],
         }
@@ -241,6 +301,7 @@ mod tests {
         let formatted = format_benchmark_result(&result);
 
         assert!(formatted.contains("test_module::test_bench"));
+        assert!(formatted.contains("mean:"));
         assert!(formatted.contains("p50:"));
         assert!(formatted.contains("p90:"));
         assert!(formatted.contains("p99:"));

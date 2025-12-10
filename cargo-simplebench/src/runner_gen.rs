@@ -29,8 +29,7 @@ pub fn generate_runner(benchmark_crates: &[BenchmarkCrate]) -> String {
     // Add main function
     code.push_str("fn main() {\n");
     code.push_str("    use simplebench_runtime::{\n");
-    code.push_str("        run_all_benchmarks_with_config,\n");
-    code.push_str("        print_summary,\n");
+    code.push_str("        run_and_stream_benchmarks,\n");
     code.push_str("        BenchmarkConfig,\n");
     code.push_str("        process_with_baselines,\n");
     code.push_str("        check_regressions_and_exit,\n");
@@ -47,8 +46,8 @@ pub fn generate_runner(benchmark_crates: &[BenchmarkCrate]) -> String {
     code.push_str("    // Load configuration (file + env overrides)\n");
     code.push_str("    let config = BenchmarkConfig::load();\n\n");
 
-    code.push_str("    // Run all benchmarks with config\n");
-    code.push_str("    let results = run_all_benchmarks_with_config(&config);\n\n");
+    code.push_str("    // Run all benchmarks with streaming output\n");
+    code.push_str("    let results = run_and_stream_benchmarks(&config);\n\n");
 
     code.push_str("    if results.is_empty() {\n");
     code.push_str("        eprintln!(\"ERROR: No benchmarks found!\");\n");
@@ -56,21 +55,14 @@ pub fn generate_runner(benchmark_crates: &[BenchmarkCrate]) -> String {
     code.push_str("        std::process::exit(1);\n");
     code.push_str("    }\n\n");
 
-    code.push_str("    // Process with baselines\n");
-    code.push_str("    let comparisons = match process_with_baselines(&results, &config.comparison) {\n");
-    code.push_str("        Ok(c) => c,\n");
-    code.push_str("        Err(e) => {\n");
-    code.push_str("            eprintln!(\"Warning: Failed to process baselines: {}\", e);\n");
-    code.push_str("            print_summary(&results, None);\n");
-    code.push_str("            return;\n");
-    code.push_str("        }\n");
-    code.push_str("    };\n\n");
-
-    code.push_str("    // Display results\n");
-    code.push_str("    print_summary(&results, Some(&comparisons));\n\n");
-
     code.push_str("    // Check for regressions and exit if in CI mode\n");
-    code.push_str("    check_regressions_and_exit(&comparisons, &config.comparison);\n");
+    code.push_str("    // Note: comparisons are handled inside run_and_stream_benchmarks\n");
+    code.push_str("    if config.comparison.ci_mode {\n");
+    code.push_str("        // Re-check baselines for CI exit code\n");
+    code.push_str("        if let Ok(comparisons) = process_with_baselines(&results, &config.comparison) {\n");
+    code.push_str("            check_regressions_and_exit(&comparisons, &config.comparison);\n");
+    code.push_str("        }\n");
+    code.push_str("    }\n");
     code.push_str("}\n");
 
     code

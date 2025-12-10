@@ -19,6 +19,7 @@ pub struct Percentiles {
     pub p50: Duration,
     pub p90: Duration,
     pub p99: Duration,
+    pub mean: Duration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,8 +34,8 @@ pub struct BenchResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Comparison {
-    pub current_p90: Duration,
-    pub baseline_p90: Duration,
+    pub current_mean: Duration,
+    pub baseline_mean: Duration,
     pub percentage_change: f64,
 }
 
@@ -76,32 +77,38 @@ where
 pub fn calculate_percentiles(timings: &[Duration]) -> Percentiles {
     let mut sorted_timings = timings.to_vec();
     sorted_timings.sort();
-    
+
     let len = sorted_timings.len();
     let p50_idx = (len * 50) / 100;
     let p90_idx = (len * 90) / 100;
     let p99_idx = (len * 99) / 100;
-    
+
+    // Calculate mean
+    let sum_nanos: u128 = timings.iter().map(|d| d.as_nanos()).sum();
+    let mean_nanos = sum_nanos / (len as u128);
+    let mean = Duration::from_nanos(mean_nanos as u64);
+
     Percentiles {
         p50: sorted_timings[p50_idx.min(len - 1)],
         p90: sorted_timings[p90_idx.min(len - 1)],
         p99: sorted_timings[p99_idx.min(len - 1)],
+        mean,
     }
 }
 
 pub fn compare_with_baseline(current: &BenchResult, baseline: &BenchResult) -> Comparison {
-    let current_p90_nanos = current.percentiles.p90.as_nanos() as f64;
-    let baseline_p90_nanos = baseline.percentiles.p90.as_nanos() as f64;
+    let current_mean_nanos = current.percentiles.mean.as_nanos() as f64;
+    let baseline_mean_nanos = baseline.percentiles.mean.as_nanos() as f64;
 
-    let percentage_change = if baseline_p90_nanos > 0.0 {
-        ((current_p90_nanos - baseline_p90_nanos) / baseline_p90_nanos) * 100.0
+    let percentage_change = if baseline_mean_nanos > 0.0 {
+        ((current_mean_nanos - baseline_mean_nanos) / baseline_mean_nanos) * 100.0
     } else {
         0.0
     };
 
     Comparison {
-        current_p90: current.percentiles.p90,
-        baseline_p90: baseline.percentiles.p90,
+        current_mean: current.percentiles.mean,
+        baseline_mean: baseline.percentiles.mean,
         percentage_change,
     }
 }
@@ -123,33 +130,111 @@ pub fn run_all_benchmarks(iterations: usize, samples: usize) -> Vec<BenchResult>
     results
 }
 
-/// Run all benchmarks with configuration
+/// Run all benchmarks with configuration (batch mode)
+///
+/// Collects all results and returns them without printing.
+/// Use `run_and_stream_benchmarks` for the streaming version.
 pub fn run_all_benchmarks_with_config(config: &crate::config::BenchmarkConfig) -> Vec<BenchResult> {
     let mut results = Vec::new();
 
     for bench in inventory::iter::<SimpleBench> {
-        let result = if let Some(fixed_iterations) = config.measurement.iterations {
-            // Use fixed iteration count
-            measure_with_warmup(
-                bench.name.to_string(),
-                bench.module.to_string(),
-                bench.func,
-                fixed_iterations,
-                config.measurement.samples,
-                config.measurement.warmup_iterations,
-            )
-        } else {
-            // Use auto-scaling
-            measure_with_auto_iterations(
-                bench.name.to_string(),
-                bench.module.to_string(),
-                bench.func,
-                config.measurement.samples,
-                config.measurement.warmup_iterations,
-                config.measurement.target_sample_duration_ms,
-            )
-        };
+        let result = measure_with_warmup(
+            bench.name.to_string(),
+            bench.module.to_string(),
+            bench.func,
+            config.measurement.iterations,
+            config.measurement.samples,
+            config.measurement.warmup_iterations,
+        );
         results.push(result);
+    }
+
+    results
+}
+
+/// Run all benchmarks with configuration and stream results
+///
+/// This is the primary entry point for the generated runner.
+/// Prints each benchmark result immediately as it completes.
+pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec<BenchResult> {
+    use crate::baseline::{BaselineManager, ComparisonResult};
+    use crate::output::{print_benchmark_result_line, print_comparison_line, print_new_baseline_line, print_streaming_summary};
+    use colored::*;
+
+    let mut results = Vec::new();
+    let mut comparisons = Vec::new();
+
+    // Initialize baseline manager
+    let baseline_manager = match BaselineManager::new() {
+        Ok(bm) => Some(bm),
+        Err(e) => {
+            eprintln!("Warning: Could not initialize baseline manager: {}", e);
+            eprintln!("Running without baseline comparison.");
+            None
+        }
+    };
+
+    println!("{} benchmarks with {} samples × {} iterations\n",
+        "Running".green().bold(),
+        config.measurement.samples,
+        config.measurement.iterations
+    );
+
+    // Run each benchmark and print immediately
+    for bench in inventory::iter::<SimpleBench> {
+        // Run benchmark
+        let result = measure_with_warmup(
+            bench.name.to_string(),
+            bench.module.to_string(),
+            bench.func,
+            config.measurement.iterations,
+            config.measurement.samples,
+            config.measurement.warmup_iterations,
+        );
+
+        // Print benchmark result immediately
+        print_benchmark_result_line(&result);
+
+        // Compare with baseline and print comparison
+        if let Some(ref bm) = baseline_manager {
+            let crate_name = result.module.split("::").next().unwrap_or("unknown");
+
+            if let Ok(Some(baseline_data)) = bm.load_baseline(crate_name, &result.name) {
+                let baseline = baseline_data.to_bench_result();
+                let comparison = compare_with_baseline(&result, &baseline);
+                let is_regression = comparison.percentage_change > config.comparison.threshold;
+
+                print_comparison_line(&comparison, &result.name, is_regression);
+
+                comparisons.push(ComparisonResult {
+                    benchmark_name: result.name.clone(),
+                    comparison: Some(comparison),
+                    is_regression,
+                });
+            } else {
+                // First run - no baseline
+                print_new_baseline_line(&result.name);
+
+                comparisons.push(ComparisonResult {
+                    benchmark_name: result.name.clone(),
+                    comparison: None,
+                    is_regression: false,
+                });
+            }
+
+            // Save new baseline
+            if let Err(e) = bm.save_baseline(crate_name, &result) {
+                eprintln!("Warning: Failed to save baseline for {}: {}", result.name, e);
+            }
+        }
+
+        results.push(result);
+        println!();  // Blank line between benchmarks
+    }
+
+    // Print summary footer
+    if !comparisons.is_empty() {
+        print_streaming_summary(&comparisons, &config.comparison);
     }
 
     results
@@ -173,23 +258,26 @@ mod tests {
             Duration::from_millis(9),
             Duration::from_millis(10),
         ];
-        
+
         let percentiles = calculate_percentiles(&timings);
 
         // For 10 samples: p50 at index 5 (6ms), p90 at index 9 (10ms), p99 at index 9 (10ms)
+        // Mean: (1+2+3+4+5+6+7+8+9+10)/10 = 55/10 = 5.5ms
         assert_eq!(percentiles.p50, Duration::from_millis(6));
         assert_eq!(percentiles.p90, Duration::from_millis(10));
         assert_eq!(percentiles.p99, Duration::from_millis(10));
+        assert_eq!(percentiles.mean, Duration::from_micros(5500));
     }
     
     #[test]
     fn test_calculate_percentiles_single_element() {
         let timings = vec![Duration::from_millis(5)];
         let percentiles = calculate_percentiles(&timings);
-        
+
         assert_eq!(percentiles.p50, Duration::from_millis(5));
         assert_eq!(percentiles.p90, Duration::from_millis(5));
         assert_eq!(percentiles.p99, Duration::from_millis(5));
+        assert_eq!(percentiles.mean, Duration::from_millis(5));
     }
     
     #[test]
@@ -229,10 +317,11 @@ mod tests {
                 p50: Duration::from_millis(5),
                 p90: Duration::from_millis(10),
                 p99: Duration::from_millis(15),
+                mean: Duration::from_millis(8),
             },
             all_timings: vec![],
         };
-        
+
         let current = BenchResult {
             name: "test".to_string(),
             module: "test".to_string(),
@@ -240,12 +329,13 @@ mod tests {
             samples: 10,
             percentiles: Percentiles {
                 p50: Duration::from_millis(5),
-                p90: Duration::from_millis(10),  // Same as baseline
+                p90: Duration::from_millis(10),
                 p99: Duration::from_millis(15),
+                mean: Duration::from_millis(8),  // Same as baseline
             },
             all_timings: vec![],
         };
-        
+
         let comparison = compare_with_baseline(&current, &baseline);
 
         assert_eq!(comparison.percentage_change, 0.0);
@@ -262,10 +352,11 @@ mod tests {
                 p50: Duration::from_millis(5),
                 p90: Duration::from_millis(10),
                 p99: Duration::from_millis(15),
+                mean: Duration::from_millis(8),
             },
             all_timings: vec![],
         };
-        
+
         let current = BenchResult {
             name: "test".to_string(),
             module: "test".to_string(),
@@ -273,12 +364,13 @@ mod tests {
             samples: 10,
             percentiles: Percentiles {
                 p50: Duration::from_millis(5),
-                p90: Duration::from_millis(12),  // 20% slower
+                p90: Duration::from_millis(12),
                 p99: Duration::from_millis(15),
+                mean: Duration::from_micros(9600),  // 20% slower
             },
             all_timings: vec![],
         };
-        
+
         let comparison = compare_with_baseline(&current, &baseline);
 
         assert_eq!(comparison.percentage_change, 20.0);
@@ -295,10 +387,11 @@ mod tests {
                 p50: Duration::from_millis(5),
                 p90: Duration::from_millis(10),
                 p99: Duration::from_millis(15),
+                mean: Duration::from_millis(8),
             },
             all_timings: vec![],
         };
-        
+
         let current = BenchResult {
             name: "test".to_string(),
             module: "test".to_string(),
@@ -306,12 +399,13 @@ mod tests {
             samples: 10,
             percentiles: Percentiles {
                 p50: Duration::from_millis(5),
-                p90: Duration::from_millis(8),  // 20% faster
+                p90: Duration::from_millis(8),
                 p99: Duration::from_millis(15),
+                mean: Duration::from_micros(6400),  // 20% faster
             },
             all_timings: vec![],
         };
-        
+
         let comparison = compare_with_baseline(&current, &baseline);
 
         assert_eq!(comparison.percentage_change, -20.0);

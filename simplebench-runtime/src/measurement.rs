@@ -62,64 +62,6 @@ where
     start.elapsed()
 }
 
-/// Estimate optimal iteration count for a benchmark
-///
-/// Runs the benchmark a few times to measure its speed, then calculates
-/// how many iterations are needed to achieve target_sample_duration.
-pub fn estimate_iterations<F>(func: &F, target_sample_duration_ms: u64) -> usize
-where
-    F: Fn(),
-{
-    // Run 3 trial iterations to get stable measurement
-    let trial_duration = {
-        let mut min_duration = Duration::MAX;
-        for _ in 0..3 {
-            let start = Instant::now();
-            func();
-            let duration = start.elapsed();
-            if duration < min_duration {
-                min_duration = duration;
-            }
-        }
-        min_duration
-    };
-
-    let target_duration = Duration::from_millis(target_sample_duration_ms);
-
-    // Calculate iterations needed to reach target duration
-    let iterations = if trial_duration.as_nanos() > 0 {
-        (target_duration.as_nanos() / trial_duration.as_nanos()) as usize
-    } else {
-        // If unmeasurably fast, use maximum iterations
-        100_000
-    };
-
-    // Clamp between reasonable bounds
-    iterations.clamp(10, 100_000)
-}
-
-/// Measure function with automatic iteration scaling
-///
-/// Estimates optimal iteration count based on target sample duration,
-/// then runs benchmark with warmup.
-pub fn measure_with_auto_iterations<F>(
-    name: String,
-    module: String,
-    func: F,
-    samples: usize,
-    warmup_iterations: usize,
-    target_sample_duration_ms: u64,
-) -> BenchResult
-where
-    F: Fn(),
-{
-    // Estimate optimal iterations
-    let iterations = estimate_iterations(&func, target_sample_duration_ms);
-
-    // Run with warmup
-    measure_with_warmup(name, module, func, iterations, samples, warmup_iterations)
-}
-
 pub fn validate_measurement_params(iterations: usize, samples: usize) -> Result<(), String> {
     if iterations == 0 {
         return Err("Iterations must be greater than 0".to_string());
@@ -127,8 +69,8 @@ pub fn validate_measurement_params(iterations: usize, samples: usize) -> Result<
     if samples == 0 {
         return Err("Samples must be greater than 0".to_string());
     }
-    if samples > 10000 {
-        return Err("Samples should not exceed 10000 for reasonable execution time".to_string());
+    if samples > 1_000_000 {
+        return Err("Samples should not exceed 1,000,000 for reasonable execution time".to_string());
     }
     Ok(())
 }
@@ -153,7 +95,8 @@ mod tests {
         assert!(validate_measurement_params(100, 100).is_ok());
         assert!(validate_measurement_params(0, 100).is_err());
         assert!(validate_measurement_params(100, 0).is_err());
-        assert!(validate_measurement_params(100, 10001).is_err());
+        assert!(validate_measurement_params(100, 1_000_001).is_err());
+        assert!(validate_measurement_params(5, 100_000).is_ok());
     }
 
     #[test]
@@ -182,54 +125,5 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_estimate_iterations_fast_function() {
-        use std::hint::black_box;
-
-        // Fast function: ~100ns
-        let func = || {
-            black_box((0..10).sum::<i32>());
-        };
-
-        let iterations = estimate_iterations(&func, 10);
-
-        // For fast operation, should estimate high iteration count
-        assert!(iterations >= 1_000);
-        assert!(iterations <= 100_000);
-    }
-
-    #[test]
-    fn test_estimate_iterations_slow_function() {
-        // Slow function: ~10ms
-        let func = || {
-            thread::sleep(Duration::from_millis(10));
-        };
-
-        let iterations = estimate_iterations(&func, 10);
-
-        // For 10ms operation targeting 10ms sample, should be minimum (10)
-        assert_eq!(iterations, 10);
-    }
-
-    #[test]
-    fn test_measure_with_auto_iterations() {
-        use std::hint::black_box;
-
-        let result = measure_with_auto_iterations(
-            "test_auto".to_string(),
-            "test_module".to_string(),
-            || {
-                black_box((0..100).sum::<i32>());
-            },
-            10, // samples
-            20, // warmup_iterations
-            10, // target_sample_duration_ms
-        );
-
-        assert_eq!(result.name, "test_auto");
-        assert_eq!(result.samples, 10);
-        assert!(result.iterations >= 10);
-        assert!(result.iterations <= 100_000);
-    }
 }
 

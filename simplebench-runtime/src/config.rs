@@ -9,30 +9,25 @@ pub struct MeasurementConfig {
     #[serde(default = "default_samples")]
     pub samples: usize,
 
-    /// Number of iterations per sample (None = auto-scale)
-    #[serde(default)]
-    pub iterations: Option<usize>,
+    /// Number of iterations per sample
+    #[serde(default = "default_iterations")]
+    pub iterations: usize,
 
     /// Number of warmup iterations before measurement
     #[serde(default = "default_warmup_iterations")]
     pub warmup_iterations: usize,
-
-    /// Target duration per sample in milliseconds (for auto-scaling)
-    #[serde(default = "default_target_sample_duration_ms")]
-    pub target_sample_duration_ms: u64,
 }
 
-fn default_samples() -> usize { 200 }
+fn default_samples() -> usize { 100_000 }
+fn default_iterations() -> usize { 5 }
 fn default_warmup_iterations() -> usize { 50 }
-fn default_target_sample_duration_ms() -> u64 { 10 }
 
 impl Default for MeasurementConfig {
     fn default() -> Self {
         Self {
             samples: default_samples(),
-            iterations: None, // Auto-scale by default
+            iterations: default_iterations(),
             warmup_iterations: default_warmup_iterations(),
-            target_sample_duration_ms: default_target_sample_duration_ms(),
         }
     }
 }
@@ -109,19 +104,13 @@ impl BenchmarkConfig {
 
         if let Ok(iterations) = std::env::var("SIMPLEBENCH_ITERATIONS") {
             if let Ok(val) = iterations.parse() {
-                self.measurement.iterations = Some(val);
+                self.measurement.iterations = val;
             }
         }
 
         if let Ok(warmup) = std::env::var("SIMPLEBENCH_WARMUP_ITERATIONS") {
             if let Ok(val) = warmup.parse() {
                 self.measurement.warmup_iterations = val;
-            }
-        }
-
-        if let Ok(duration) = std::env::var("SIMPLEBENCH_TARGET_DURATION_MS") {
-            if let Ok(val) = duration.parse() {
-                self.measurement.target_sample_duration_ms = val;
             }
         }
 
@@ -154,10 +143,9 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = BenchmarkConfig::default();
-        assert_eq!(config.measurement.samples, 200);
-        assert_eq!(config.measurement.iterations, None);
+        assert_eq!(config.measurement.samples, 100_000);
+        assert_eq!(config.measurement.iterations, 5);
         assert_eq!(config.measurement.warmup_iterations, 50);
-        assert_eq!(config.measurement.target_sample_duration_ms, 10);
         assert_eq!(config.comparison.threshold, 5.0);
         assert_eq!(config.comparison.ci_mode, false);
     }
@@ -170,7 +158,8 @@ mod tests {
         config.save(temp_file.path()).unwrap();
         let loaded = BenchmarkConfig::from_file(temp_file.path()).unwrap();
 
-        assert_eq!(loaded.measurement.samples, 200);
+        assert_eq!(loaded.measurement.samples, 100_000);
+        assert_eq!(loaded.measurement.iterations, 5);
         assert_eq!(loaded.measurement.warmup_iterations, 50);
     }
 
@@ -186,7 +175,7 @@ mod tests {
         config.apply_env_overrides();
 
         assert_eq!(config.measurement.samples, 300);
-        assert_eq!(config.measurement.iterations, Some(1000));
+        assert_eq!(config.measurement.iterations, 1000);
         assert_eq!(config.measurement.warmup_iterations, 100);
         assert_eq!(config.comparison.ci_mode, true);
         assert_eq!(config.comparison.threshold, 10.0);
@@ -219,7 +208,7 @@ mod tests {
         assert_eq!(config.comparison.threshold, 7.5);
 
         // Default values for unspecified fields
-        assert_eq!(config.measurement.iterations, None);
+        assert_eq!(config.measurement.iterations, 5);
         assert_eq!(config.measurement.warmup_iterations, 50);
         assert_eq!(config.comparison.ci_mode, false);
     }

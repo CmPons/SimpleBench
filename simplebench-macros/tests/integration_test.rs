@@ -92,6 +92,7 @@ fn test_comparison_functionality() {
             p50: Duration::from_millis(5),
             p90: Duration::from_millis(10),
             p99: Duration::from_millis(15),
+            mean: Duration::from_millis(8),
         },
         all_timings: vec![],
     };
@@ -103,8 +104,9 @@ fn test_comparison_functionality() {
         samples: 10,
         percentiles: Percentiles {
             p50: Duration::from_millis(5),
-            p90: Duration::from_millis(13),  // 30% slower
+            p90: Duration::from_millis(13),
             p99: Duration::from_millis(15),
+            mean: Duration::from_micros(10400),  // 30% slower than 8ms
         },
         all_timings: vec![],
     };
