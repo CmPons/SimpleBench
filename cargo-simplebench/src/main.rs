@@ -51,6 +51,8 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Clean existing benchmark results
+    Clean {},
     /// Analyze benchmark results
     Analyze {
         /// Benchmark name (e.g., "game_math_vector_add" or "crate_name_bench_name")
@@ -91,6 +93,11 @@ fn main() -> Result<()> {
             last,
         }) => {
             return analyze::run_analysis(&workspace_root, &benchmark_name, run, last);
+        }
+        Some(Commands::Clean {}) => {
+            println!("Cleaning .benches directory!");
+            return std::fs::remove_dir_all(workspace_root.join(".benches"))
+                .map_err(anyhow::Error::msg);
         }
         None => {
             // No subcommand - run benchmarks (default behavior)

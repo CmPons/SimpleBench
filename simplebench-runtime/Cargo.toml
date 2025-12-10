@@ -12,6 +12,7 @@ chrono = { version = "0.4", features = ["serde"] }
 default-net = "0.22"
 sha2 = "0.10"
 toml = "0.8"
+affinity = "0.1.2"
 
 [dev-dependencies]
 tempfile = "3.0"

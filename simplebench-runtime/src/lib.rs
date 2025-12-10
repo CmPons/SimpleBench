@@ -1,15 +1,15 @@
-use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
+use std::time::{Duration, Instant};
 
-pub mod measurement;
-pub mod output;
 pub mod baseline;
 pub mod config;
+pub mod measurement;
+pub mod output;
 
-pub use measurement::*;
-pub use output::*;
 pub use baseline::*;
 pub use config::*;
+pub use measurement::*;
+pub use output::*;
 
 // Re-export inventory for use by the macro
 pub use inventory;
@@ -25,14 +25,14 @@ pub struct Percentiles {
 /// Comprehensive statistics for a benchmark run
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Statistics {
-    pub mean: u128,      // nanoseconds
-    pub median: u128,    // nanoseconds (p50)
-    pub p90: u128,       // nanoseconds
-    pub p99: u128,       // nanoseconds
-    pub std_dev: f64,    // standard deviation in nanoseconds
-    pub variance: f64,   // variance in nanoseconds²
-    pub min: u128,       // nanoseconds
-    pub max: u128,       // nanoseconds
+    pub mean: u128,    // nanoseconds
+    pub median: u128,  // nanoseconds (p50)
+    pub p90: u128,     // nanoseconds
+    pub p99: u128,     // nanoseconds
+    pub std_dev: f64,  // standard deviation in nanoseconds
+    pub variance: f64, // variance in nanoseconds²
+    pub min: u128,     // nanoseconds
+    pub max: u128,     // nanoseconds
     pub sample_count: usize,
 }
 
@@ -61,12 +61,18 @@ pub struct SimpleBench {
 
 inventory::collect!(SimpleBench);
 
-pub fn measure_function<F>(name: String, module: String, func: F, iterations: usize, samples: usize) -> BenchResult 
+pub fn measure_function<F>(
+    name: String,
+    module: String,
+    func: F,
+    iterations: usize,
+    samples: usize,
+) -> BenchResult
 where
     F: Fn(),
 {
     let mut all_timings = Vec::with_capacity(samples);
-    
+
     for _ in 0..samples {
         let start = Instant::now();
         for _ in 0..iterations {
@@ -75,9 +81,9 @@ where
         let elapsed = start.elapsed();
         all_timings.push(elapsed);
     }
-    
+
     let percentiles = calculate_percentiles(&all_timings);
-    
+
     BenchResult {
         name,
         module,
@@ -147,12 +153,14 @@ pub fn calculate_statistics(samples: &[u128]) -> Statistics {
 
     // Calculate variance and standard deviation
     let mean_f64 = mean as f64;
-    let variance: f64 = samples.iter()
+    let variance: f64 = samples
+        .iter()
         .map(|&s| {
             let diff = s as f64 - mean_f64;
             diff * diff
         })
-        .sum::<f64>() / (sample_count as f64);
+        .sum::<f64>()
+        / (sample_count as f64);
 
     let std_dev = variance.sqrt();
 
@@ -235,8 +243,16 @@ pub fn run_all_benchmarks_with_config(config: &crate::config::BenchmarkConfig) -
 /// Prints each benchmark result immediately as it completes.
 pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec<BenchResult> {
     use crate::baseline::{BaselineManager, ComparisonResult};
-    use crate::output::{print_benchmark_result_line, print_comparison_line, print_new_baseline_line, print_streaming_summary};
+    use crate::output::{
+        print_benchmark_result_line, print_comparison_line, print_new_baseline_line,
+        print_streaming_summary,
+    };
     use colored::*;
+
+    match affinity::set_thread_affinity([0]) {
+        Ok(_) => println!("{}\n", "Set affinity to core 0".green().bold()),
+        Err(e) => println!("Failed to set core affinity {e:?}"),
+    };
 
     let mut results = Vec::new();
     let mut comparisons = Vec::new();
@@ -251,7 +267,8 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
         }
     };
 
-    println!("{} benchmarks with {} samples × {} iterations\n",
+    println!(
+        "{} benchmarks with {} samples × {} iterations\n",
         "Running".green().bold(),
         config.measurement.samples,
         config.measurement.iterations
@@ -301,12 +318,15 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
 
             // Save new baseline
             if let Err(e) = bm.save_baseline(crate_name, &result) {
-                eprintln!("Warning: Failed to save baseline for {}: {}", result.name, e);
+                eprintln!(
+                    "Warning: Failed to save baseline for {}: {}",
+                    result.name, e
+                );
             }
         }
 
         results.push(result);
-        println!();  // Blank line between benchmarks
+        println!(); // Blank line between benchmarks
     }
 
     // Print summary footer
@@ -320,7 +340,7 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_calculate_percentiles() {
         let timings = vec![
@@ -345,7 +365,7 @@ mod tests {
         assert_eq!(percentiles.p99, Duration::from_millis(10));
         assert_eq!(percentiles.mean, Duration::from_micros(5500));
     }
-    
+
     #[test]
     fn test_calculate_percentiles_single_element() {
         let timings = vec![Duration::from_millis(5)];
@@ -356,7 +376,7 @@ mod tests {
         assert_eq!(percentiles.p99, Duration::from_millis(5));
         assert_eq!(percentiles.mean, Duration::from_millis(5));
     }
-    
+
     #[test]
     fn test_measure_function() {
         let result = measure_function(
@@ -369,20 +389,20 @@ mod tests {
             10,
             5,
         );
-        
+
         assert_eq!(result.name, "test_bench");
         assert_eq!(result.module, "test_module");
         assert_eq!(result.iterations, 10);
         assert_eq!(result.samples, 5);
         assert_eq!(result.all_timings.len(), 5);
-        
+
         // Verify all timings are reasonable
         for timing in &result.all_timings {
             assert!(*timing > Duration::from_nanos(0));
             assert!(*timing < Duration::from_secs(1));
         }
     }
-    
+
     #[test]
     fn test_compare_with_baseline_no_regression() {
         let baseline = BenchResult {
@@ -408,7 +428,7 @@ mod tests {
                 p50: Duration::from_millis(5),
                 p90: Duration::from_millis(10),
                 p99: Duration::from_millis(15),
-                mean: Duration::from_millis(8),  // Same as baseline
+                mean: Duration::from_millis(8), // Same as baseline
             },
             all_timings: vec![],
         };
@@ -443,7 +463,7 @@ mod tests {
                 p50: Duration::from_millis(5),
                 p90: Duration::from_millis(12),
                 p99: Duration::from_millis(15),
-                mean: Duration::from_micros(9600),  // 20% slower
+                mean: Duration::from_micros(9600), // 20% slower
             },
             all_timings: vec![],
         };
@@ -478,7 +498,7 @@ mod tests {
                 p50: Duration::from_millis(5),
                 p90: Duration::from_millis(8),
                 p99: Duration::from_millis(15),
-                mean: Duration::from_micros(6400),  // 20% faster
+                mean: Duration::from_micros(6400), // 20% faster
             },
             all_timings: vec![],
         };
@@ -487,7 +507,7 @@ mod tests {
 
         assert_eq!(comparison.percentage_change, -20.0);
     }
-    
+
     inventory::submit! {
         SimpleBench {
             name: "test_inventory_benchmark",
@@ -495,20 +515,21 @@ mod tests {
             func: test_benchmark_function,
         }
     }
-    
+
     fn test_benchmark_function() {
         let _ = (0..1000).sum::<i32>();
     }
-    
+
     #[test]
     fn test_run_all_benchmarks() {
         let results = run_all_benchmarks(100, 5);
-        
+
         // Should find at least our test benchmark
         assert!(!results.is_empty());
-        
+
         // Check if our test benchmark is included
         let found_test_bench = results.iter().any(|r| r.name == "test_inventory_benchmark");
         assert!(found_test_bench);
     }
 }
+
