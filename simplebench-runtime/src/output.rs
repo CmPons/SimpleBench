@@ -50,12 +50,31 @@ pub fn format_benchmark_result(result: &BenchResult) -> String {
     let p90_str = format_duration_human_readable(result.percentiles.p90);
     let p99_str = format_duration_human_readable(result.percentiles.p99);
 
+    // Calculate coefficient of variation (CV) from raw timings if available
+    let cv_str = if !result.all_timings.is_empty() {
+        let samples_ns: Vec<u128> = result.all_timings.iter().map(|d| d.as_nanos()).collect();
+        let stats = crate::calculate_statistics(&samples_ns);
+        let cv_pct = if stats.mean > 0 {
+            (stats.std_dev / stats.mean as f64) * 100.0
+        } else {
+            0.0
+        };
+        format!(", CV: {:.1}%", cv_pct)
+    } else {
+        String::new()
+    };
+
     format!(
-        "{} {} {} mean: {}, p50: {}, p90: {}, p99: {}",
+        "{} {} {} mean: {}{}, p50: {}, p90: {}, p99: {}",
         "BENCH".green().bold(),
         bench_name.cyan(),
         format!("[{} samples × {} iters]", result.samples, result.iterations).dimmed(),
         mean_str.cyan().bold(),
+        if !cv_str.is_empty() {
+            format!(" ({})", cv_str.trim_start_matches(", ")).dimmed().to_string()
+        } else {
+            String::new()
+        },
         p50_str.dimmed(),
         p90_str.dimmed(),
         p99_str.dimmed()

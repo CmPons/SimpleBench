@@ -140,6 +140,7 @@ dependencies = [
  "colored",
  "serde",
  "serde_json",
+ "simplebench-runtime",
 ]
 
 [[package]]

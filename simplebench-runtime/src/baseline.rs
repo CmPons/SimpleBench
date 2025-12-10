@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
 use crate::{BenchResult, Percentiles};
@@ -47,35 +48,68 @@ fn hash_mac_address(mac: &str) -> Result<String, std::io::Error> {
 pub struct BaselineData {
     pub benchmark_name: String,
     pub module: String,
-    pub percentiles: Percentiles,
-    pub iterations: usize,
-    pub samples: usize,
     pub timestamp: String,
+    /// All raw timing samples in nanoseconds
+    pub samples: Vec<u128>,
+    /// Comprehensive statistics calculated from samples
+    pub statistics: crate::Statistics,
+    pub iterations: usize,
     #[serde(alias = "hostname")]
     pub machine_id: String,
+
+    // Legacy fields for backward compatibility (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub percentiles: Option<Percentiles>,
 }
 
 impl BaselineData {
     pub fn from_bench_result(result: &BenchResult, machine_id: String) -> Self {
+        // Convert Duration timings to u128 nanoseconds
+        let samples: Vec<u128> = result.all_timings.iter()
+            .map(|d| d.as_nanos())
+            .collect();
+
+        // Calculate comprehensive statistics
+        let statistics = crate::calculate_statistics(&samples);
+
         Self {
             benchmark_name: result.name.clone(),
             module: result.module.clone(),
-            percentiles: result.percentiles.clone(),
-            iterations: result.iterations,
-            samples: result.samples,
             timestamp: chrono::Utc::now().to_rfc3339(),
+            samples,
+            statistics,
+            iterations: result.iterations,
             machine_id,
+            percentiles: Some(result.percentiles.clone()),
         }
     }
 
     pub fn to_bench_result(&self) -> BenchResult {
+        // If we have percentiles (new format), use them
+        let percentiles = if let Some(ref p) = self.percentiles {
+            p.clone()
+        } else {
+            // Reconstruct from statistics (for forward compatibility)
+            Percentiles {
+                mean: Duration::from_nanos(self.statistics.mean as u64),
+                p50: Duration::from_nanos(self.statistics.median as u64),
+                p90: Duration::from_nanos(self.statistics.p90 as u64),
+                p99: Duration::from_nanos(self.statistics.p99 as u64),
+            }
+        };
+
+        // Convert samples back to Duration
+        let all_timings: Vec<Duration> = self.samples.iter()
+            .map(|&ns| Duration::from_nanos(ns as u64))
+            .collect();
+
         BenchResult {
             name: self.benchmark_name.clone(),
             module: self.module.clone(),
-            percentiles: self.percentiles.clone(),
+            percentiles,
             iterations: self.iterations,
-            samples: self.samples,
-            all_timings: vec![], // Not stored in baseline
+            samples: self.samples.len(),
+            all_timings,
         }
     }
 }
@@ -115,33 +149,116 @@ impl BaselineManager {
         self.root_dir.join(&self.machine_id)
     }
 
-    /// Get the file path for a specific benchmark baseline
-    fn baseline_path(&self, crate_name: &str, benchmark_name: &str) -> PathBuf {
+    /// Get the directory path for a specific benchmark's runs
+    fn benchmark_dir(&self, crate_name: &str, benchmark_name: &str) -> PathBuf {
+        let dir_name = format!("{}_{}", crate_name, benchmark_name);
+        self.machine_dir().join(dir_name)
+    }
+
+    /// Get the file path for a specific benchmark baseline (legacy - single file)
+    fn legacy_baseline_path(&self, crate_name: &str, benchmark_name: &str) -> PathBuf {
         let filename = format!("{}_{}.json", crate_name, benchmark_name);
         self.machine_dir().join(filename)
     }
 
-    /// Ensure the baseline directory exists
-    fn ensure_dir_exists(&self) -> Result<(), std::io::Error> {
-        fs::create_dir_all(self.machine_dir())
+    /// Get a timestamped run path for a new baseline
+    fn get_run_path(&self, crate_name: &str, benchmark_name: &str) -> PathBuf {
+        let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
+        let filename = format!("{}.json", timestamp);
+        self.benchmark_dir(crate_name, benchmark_name).join(filename)
     }
 
-    /// Save a benchmark result as a baseline
+    /// Ensure the baseline directory exists
+    fn ensure_dir_exists(&self, crate_name: &str, benchmark_name: &str) -> Result<(), std::io::Error> {
+        fs::create_dir_all(self.benchmark_dir(crate_name, benchmark_name))
+    }
+
+    /// Save a benchmark result as a baseline (creates new timestamped file)
     pub fn save_baseline(&self, crate_name: &str, result: &BenchResult) -> Result<(), std::io::Error> {
-        self.ensure_dir_exists()?;
+        self.ensure_dir_exists(crate_name, &result.name)?;
 
         let baseline = BaselineData::from_bench_result(result, self.machine_id.clone());
         let json = serde_json::to_string_pretty(&baseline)?;
 
-        let path = self.baseline_path(crate_name, &result.name);
+        let path = self.get_run_path(crate_name, &result.name);
         fs::write(path, json)?;
 
         Ok(())
     }
 
-    /// Load a baseline for a specific benchmark
+    /// Load the most recent baseline for a specific benchmark
     pub fn load_baseline(&self, crate_name: &str, benchmark_name: &str) -> Result<Option<BaselineData>, std::io::Error> {
-        let path = self.baseline_path(crate_name, benchmark_name);
+        let bench_dir = self.benchmark_dir(crate_name, benchmark_name);
+
+        // Check if new directory structure exists
+        if bench_dir.exists() && bench_dir.is_dir() {
+            // Find most recent JSON file
+            let mut runs: Vec<_> = fs::read_dir(&bench_dir)?
+                .filter_map(|e| e.ok())
+                .filter(|e| e.path().extension().map_or(false, |ext| ext == "json"))
+                .collect();
+
+            if runs.is_empty() {
+                return Ok(None);
+            }
+
+            // Sort by filename (timestamps are sortable)
+            runs.sort_by_key(|e| e.file_name());
+            let latest = runs.last().unwrap();
+
+            let contents = fs::read_to_string(latest.path())?;
+            let baseline: BaselineData = serde_json::from_str(&contents)?;
+            return Ok(Some(baseline));
+        }
+
+        // Fall back to legacy single-file format
+        let legacy_path = self.legacy_baseline_path(crate_name, benchmark_name);
+        if legacy_path.exists() {
+            let contents = fs::read_to_string(legacy_path)?;
+            let baseline: BaselineData = serde_json::from_str(&contents)?;
+            return Ok(Some(baseline));
+        }
+
+        Ok(None)
+    }
+
+    /// Check if a baseline exists for a benchmark
+    pub fn has_baseline(&self, crate_name: &str, benchmark_name: &str) -> bool {
+        let bench_dir = self.benchmark_dir(crate_name, benchmark_name);
+        if bench_dir.exists() && bench_dir.is_dir() {
+            return true;
+        }
+        self.legacy_baseline_path(crate_name, benchmark_name).exists()
+    }
+
+    /// List all run timestamps for a specific benchmark
+    pub fn list_runs(&self, crate_name: &str, benchmark_name: &str) -> Result<Vec<String>, std::io::Error> {
+        let bench_dir = self.benchmark_dir(crate_name, benchmark_name);
+
+        if !bench_dir.exists() || !bench_dir.is_dir() {
+            return Ok(vec![]);
+        }
+
+        let mut runs: Vec<String> = fs::read_dir(&bench_dir)?
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().map_or(false, |ext| ext == "json"))
+            .filter_map(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .strip_suffix(".json")
+                    .map(|s| s.to_string())
+            })
+            .collect();
+
+        runs.sort();
+        Ok(runs)
+    }
+
+    /// Load a specific run by timestamp
+    pub fn load_run(&self, crate_name: &str, benchmark_name: &str, timestamp: &str) -> Result<Option<BaselineData>, std::io::Error> {
+        let bench_dir = self.benchmark_dir(crate_name, benchmark_name);
+        let filename = format!("{}.json", timestamp);
+        let path = bench_dir.join(filename);
 
         if !path.exists() {
             return Ok(None);
@@ -149,13 +266,7 @@ impl BaselineManager {
 
         let contents = fs::read_to_string(path)?;
         let baseline: BaselineData = serde_json::from_str(&contents)?;
-
         Ok(Some(baseline))
-    }
-
-    /// Check if a baseline exists for a benchmark
-    pub fn has_baseline(&self, crate_name: &str, benchmark_name: &str) -> bool {
-        self.baseline_path(crate_name, benchmark_name).exists()
     }
 
     /// List all baselines for a crate
@@ -171,14 +282,23 @@ impl BaselineManager {
 
         for entry in fs::read_dir(machine_dir)? {
             let entry = entry?;
-            let filename = entry.file_name().to_string_lossy().to_string();
+            let name = entry.file_name().to_string_lossy().to_string();
 
-            if filename.starts_with(&prefix) && filename.ends_with(".json") {
-                // Extract benchmark name from filename
-                let benchmark_name = filename
+            // Check for new directory structure
+            if name.starts_with(&prefix) && entry.path().is_dir() {
+                // Extract benchmark name from directory name
+                let benchmark_name = name
+                    .strip_prefix(&prefix)
+                    .unwrap_or(&name)
+                    .to_string();
+                baselines.push(benchmark_name);
+            }
+            // Check for legacy single-file format
+            else if name.starts_with(&prefix) && name.ends_with(".json") {
+                let benchmark_name = name
                     .strip_prefix(&prefix)
                     .and_then(|s| s.strip_suffix(".json"))
-                    .unwrap_or(&filename)
+                    .unwrap_or(&name)
                     .to_string();
                 baselines.push(benchmark_name);
             }
@@ -293,7 +413,7 @@ mod tests {
                 p99: Duration::from_millis(15),
                 mean: Duration::from_millis(8),
             },
-            all_timings: vec![],
+            all_timings: vec![Duration::from_millis(5); 10],
         }
     }
 
@@ -308,7 +428,8 @@ mod tests {
         assert_eq!(baseline.module, "test_module");
         assert_eq!(baseline.machine_id, machine_id);
         assert_eq!(baseline.iterations, 100);
-        assert_eq!(baseline.samples, 10);
+        assert_eq!(baseline.statistics.sample_count, 10);
+        assert_eq!(baseline.samples.len(), 10);
 
         let converted = baseline.to_bench_result();
         assert_eq!(converted.name, result.name);
@@ -333,7 +454,8 @@ mod tests {
         let baseline = loaded.unwrap();
         assert_eq!(baseline.benchmark_name, "test_bench");
         assert_eq!(baseline.module, "test_module");
-        assert_eq!(baseline.percentiles.p90, Duration::from_millis(10));
+        assert!(baseline.percentiles.is_some());
+        assert_eq!(baseline.percentiles.unwrap().p90, Duration::from_millis(10));
     }
 
     #[test]

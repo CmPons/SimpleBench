@@ -1,10 +1,11 @@
+mod analyze;
 mod compile;
 mod metadata;
 mod rlib_selection;
 mod runner_gen;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use colored::*;
 use std::env;
 use std::path::PathBuf;
@@ -16,33 +17,53 @@ use std::process::Command;
 #[command(bin_name = "cargo simplebench")]
 #[command(version, about, long_about = None)]
 struct Args {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
     /// Enable CI mode: fail on performance regressions
-    #[arg(long)]
+    #[arg(long, global = true)]
     ci: bool,
 
     /// Regression threshold percentage (default: 5.0)
-    #[arg(long)]
+    #[arg(long, global = true)]
     threshold: Option<f64>,
 
     /// Number of timing samples per benchmark (default: 200)
-    #[arg(long)]
+    #[arg(long, global = true)]
     samples: Option<usize>,
 
     /// Number of iterations per sample (default: auto-scale)
-    #[arg(long)]
+    #[arg(long, global = true)]
     iterations: Option<usize>,
 
     /// Number of warmup iterations (default: 50)
-    #[arg(long)]
+    #[arg(long, global = true)]
     warmup_iterations: Option<usize>,
 
     /// Target sample duration in milliseconds for auto-scaling (default: 10)
-    #[arg(long)]
+    #[arg(long, global = true)]
     target_duration_ms: Option<u64>,
 
     /// Workspace root directory (default: current directory)
-    #[arg(long)]
+    #[arg(long, global = true)]
     workspace_root: Option<PathBuf>,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    /// Analyze benchmark results
+    Analyze {
+        /// Benchmark name (e.g., "game_math_vector_add" or "crate_name_bench_name")
+        benchmark_name: String,
+
+        /// Analyze a specific run by timestamp (e.g., "2025-01-15T10-30-00")
+        #[arg(long)]
+        run: Option<String>,
+
+        /// Analyze the last N runs
+        #[arg(long)]
+        last: Option<usize>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -59,7 +80,22 @@ fn main() -> Result<()> {
     // Determine workspace root
     let workspace_root = cli_args
         .workspace_root
+        .clone()
         .unwrap_or_else(|| env::current_dir().expect("Failed to get current directory"));
+
+    // Handle subcommands
+    match cli_args.command {
+        Some(Commands::Analyze {
+            benchmark_name,
+            run,
+            last,
+        }) => {
+            return analyze::run_analysis(&workspace_root, &benchmark_name, run, last);
+        }
+        None => {
+            // No subcommand - run benchmarks (default behavior)
+        }
+    }
 
     // Step 1: Analyze workspace
     println!("{}", "Analyzing workspace...".green().bold());

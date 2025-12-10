@@ -22,6 +22,20 @@ pub struct Percentiles {
     pub mean: Duration,
 }
 
+/// Comprehensive statistics for a benchmark run
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Statistics {
+    pub mean: u128,      // nanoseconds
+    pub median: u128,    // nanoseconds (p50)
+    pub p90: u128,       // nanoseconds
+    pub p99: u128,       // nanoseconds
+    pub std_dev: f64,    // standard deviation in nanoseconds
+    pub variance: f64,   // variance in nanoseconds²
+    pub min: u128,       // nanoseconds
+    pub max: u128,       // nanoseconds
+    pub sample_count: usize,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchResult {
     pub name: String,
@@ -93,6 +107,69 @@ pub fn calculate_percentiles(timings: &[Duration]) -> Percentiles {
         p90: sorted_timings[p90_idx.min(len - 1)],
         p99: sorted_timings[p99_idx.min(len - 1)],
         mean,
+    }
+}
+
+/// Calculate comprehensive statistics from raw timing samples
+pub fn calculate_statistics(samples: &[u128]) -> Statistics {
+    let sample_count = samples.len();
+
+    if sample_count == 0 {
+        return Statistics {
+            mean: 0,
+            median: 0,
+            p90: 0,
+            p99: 0,
+            std_dev: 0.0,
+            variance: 0.0,
+            min: 0,
+            max: 0,
+            sample_count: 0,
+        };
+    }
+
+    // Sort for percentile calculations
+    let mut sorted = samples.to_vec();
+    sorted.sort();
+
+    // Calculate percentiles
+    let p50_idx = (sample_count * 50) / 100;
+    let p90_idx = (sample_count * 90) / 100;
+    let p99_idx = (sample_count * 99) / 100;
+
+    let median = sorted[p50_idx.min(sample_count - 1)];
+    let p90 = sorted[p90_idx.min(sample_count - 1)];
+    let p99 = sorted[p99_idx.min(sample_count - 1)];
+
+    // Calculate mean
+    let sum: u128 = samples.iter().sum();
+    let mean = sum / (sample_count as u128);
+
+    // Calculate variance and standard deviation
+    let mean_f64 = mean as f64;
+    let variance: f64 = samples.iter()
+        .map(|&s| {
+            let diff = s as f64 - mean_f64;
+            diff * diff
+        })
+        .sum::<f64>() / (sample_count as f64);
+
+    let std_dev = variance.sqrt();
+
+    // Min and max
+    let min = *sorted.first().unwrap();
+    let max = *sorted.last().unwrap();
+
+    Statistics {
+        mean,
+        median,
+        p90,
+        p99,
+        std_dev,
+        variance,
+        min,
+        max,
+        sample_count,
     }
 }
 
