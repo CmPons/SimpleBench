@@ -293,8 +293,21 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
         }
     };
 
+    // Get benchmark filter if specified
+    let bench_filter = std::env::var("SIMPLEBENCH_BENCH_FILTER").ok();
+
+    // Count how many benchmarks match the filter
+    let total_benchmarks: usize = inventory::iter::<SimpleBench>().count();
+    let filtered_count = if let Some(ref filter) = bench_filter {
+        inventory::iter::<SimpleBench>()
+            .filter(|b| b.name.contains(filter))
+            .count()
+    } else {
+        total_benchmarks
+    };
+
     println!(
-        "{} {} {} {} {}\n",
+        "{} {} {} {} {}",
         "Running benchmarks with".green().bold(),
         config.measurement.samples,
         "samples ×".green().bold(),
@@ -302,8 +315,30 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
         "iterations".green().bold()
     );
 
+    if let Some(ref filter) = bench_filter {
+        println!(
+            "{} {} ({} matched filter: \"{}\")\n",
+            "Filtering to".dimmed(),
+            filtered_count,
+            if filtered_count == 1 {
+                "benchmark"
+            } else {
+                "benchmarks"
+            },
+            filter
+        );
+    } else {
+        println!();
+    }
+
     // Run each benchmark and print immediately
     for bench in inventory::iter::<SimpleBench> {
+        // Apply filter if specified
+        if let Some(ref filter) = bench_filter {
+            if !bench.name.contains(filter) {
+                continue; // Skip this benchmark
+            }
+        }
         // Run benchmark
         let result = measure_with_warmup(
             bench.name.to_string(),
@@ -360,6 +395,17 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
     // Print summary footer
     if !comparisons.is_empty() {
         print_streaming_summary(&comparisons, &config.comparison);
+
+        // Show filter stats if filtering was applied
+        if let Some(ref filter) = bench_filter {
+            println!(
+                "\n{} {} of {} total benchmarks (filter: \"{}\")",
+                "Ran".dimmed(),
+                filtered_count,
+                total_benchmarks,
+                filter
+            );
+        }
     }
 
     results

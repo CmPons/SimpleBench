@@ -11,6 +11,16 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
+/// Configuration for running benchmarks
+struct RunConfig {
+    bench_filter: Option<String>,
+    samples: Option<usize>,
+    iterations: Option<usize>,
+    warmup_duration: Option<u64>,
+    threshold: Option<f64>,
+    ci: bool,
+}
+
 /// SimpleBench - Simple microbenchmarking for Rust
 #[derive(Parser, Debug)]
 #[command(name = "cargo-simplebench")]
@@ -20,30 +30,6 @@ struct Args {
     #[command(subcommand)]
     command: Option<Commands>,
 
-    /// Enable CI mode: fail on performance regressions
-    #[arg(long, global = true)]
-    ci: bool,
-
-    /// Regression threshold percentage (default: 5.0)
-    #[arg(long, global = true)]
-    threshold: Option<f64>,
-
-    /// Number of timing samples per benchmark (default: 200)
-    #[arg(long, global = true)]
-    samples: Option<usize>,
-
-    /// Number of iterations per sample (default: auto-scale)
-    #[arg(long, global = true)]
-    iterations: Option<usize>,
-
-    /// Number of warmup iterations (default: 50)
-    #[arg(long, global = true)]
-    warmup_iterations: Option<usize>,
-
-    /// Target sample duration in milliseconds for auto-scaling (default: 10)
-    #[arg(long, global = true)]
-    target_duration_ms: Option<u64>,
-
     /// Workspace root directory (default: current directory)
     #[arg(long, global = true)]
     workspace_root: Option<PathBuf>,
@@ -51,8 +37,36 @@ struct Args {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Run benchmarks (default command)
+    Run {
+        /// Run only benchmarks matching this name (substring match)
+        #[arg(long)]
+        bench: Option<String>,
+
+        /// Number of timing samples per benchmark
+        #[arg(long)]
+        samples: Option<usize>,
+
+        /// Number of iterations per sample
+        #[arg(long)]
+        iterations: Option<usize>,
+
+        /// Warmup duration in seconds (default: 3)
+        #[arg(long)]
+        warmup_duration: Option<u64>,
+
+        /// Regression threshold percentage (default: 5.0)
+        #[arg(long)]
+        threshold: Option<f64>,
+
+        /// Enable CI mode: fail on performance regressions
+        #[arg(long)]
+        ci: bool,
+    },
+
     /// Clean existing benchmark results
     Clean {},
+
     /// Analyze benchmark results
     Analyze {
         /// Benchmark name (e.g., "game_math_vector_add" or "crate_name_bench_name")
@@ -86,7 +100,7 @@ fn main() -> Result<()> {
         .unwrap_or_else(|| env::current_dir().expect("Failed to get current directory"));
 
     // Handle subcommands
-    match cli_args.command {
+    let run_config = match cli_args.command {
         Some(Commands::Analyze {
             benchmark_name,
             run,
@@ -99,10 +113,36 @@ fn main() -> Result<()> {
             return std::fs::remove_dir_all(workspace_root.join(".benches"))
                 .map_err(anyhow::Error::msg);
         }
-        None => {
-            // No subcommand - run benchmarks (default behavior)
+        Some(Commands::Run {
+            bench,
+            samples,
+            iterations,
+            warmup_duration,
+            threshold,
+            ci,
+        }) => {
+            // Explicit run command
+            RunConfig {
+                bench_filter: bench,
+                samples,
+                iterations,
+                warmup_duration,
+                threshold,
+                ci,
+            }
         }
-    }
+        None => {
+            // No subcommand - default to running all benchmarks
+            RunConfig {
+                bench_filter: None,
+                samples: None,
+                iterations: None,
+                warmup_duration: None,
+                threshold: None,
+                ci: false,
+            }
+        }
+    };
 
     // Step 1: Analyze workspace
     println!("{}", "Analyzing workspace...".green().bold());
@@ -192,28 +232,29 @@ fn main() -> Result<()> {
     );
 
     // Pass CLI overrides as environment variables
-    if cli_args.ci {
+    if run_config.ci {
         cmd.env("SIMPLEBENCH_CI", "1");
     }
 
-    if let Some(threshold) = cli_args.threshold {
+    if let Some(threshold) = run_config.threshold {
         cmd.env("SIMPLEBENCH_THRESHOLD", threshold.to_string());
     }
 
-    if let Some(samples) = cli_args.samples {
+    if let Some(samples) = run_config.samples {
         cmd.env("SIMPLEBENCH_SAMPLES", samples.to_string());
     }
 
-    if let Some(iterations) = cli_args.iterations {
+    if let Some(iterations) = run_config.iterations {
         cmd.env("SIMPLEBENCH_ITERATIONS", iterations.to_string());
     }
 
-    if let Some(warmup) = cli_args.warmup_iterations {
-        cmd.env("SIMPLEBENCH_WARMUP_ITERATIONS", warmup.to_string());
+    if let Some(warmup_duration) = run_config.warmup_duration {
+        cmd.env("SIMPLEBENCH_WARMUP_DURATION", warmup_duration.to_string());
     }
 
-    if let Some(duration) = cli_args.target_duration_ms {
-        cmd.env("SIMPLEBENCH_TARGET_DURATION_MS", duration.to_string());
+    // Pass benchmark filter to runner
+    if let Some(filter) = run_config.bench_filter {
+        cmd.env("SIMPLEBENCH_BENCH_FILTER", filter);
     }
 
     let status = cmd.status().context("Failed to execute runner")?;
