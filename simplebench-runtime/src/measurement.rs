@@ -1,5 +1,33 @@
-use crate::{calculate_percentiles, BenchResult};
+use crate::{calculate_percentiles, BenchResult, CpuMonitor, CpuSnapshot};
 use std::time::{Duration, Instant};
+
+/// Warmup benchmark using time-based exponential doubling (Criterion-style)
+fn warmup_benchmark<F>(bench_fn: &F, warmup_duration: Duration, iterations: usize)
+where
+    F: Fn(),
+{
+    let start = Instant::now();
+    let mut total_iterations = 0u64;
+    let mut batch_size = 1u64;
+
+    while start.elapsed() < warmup_duration {
+        // Run benchmark function batch_size times
+        for _ in 0..batch_size {
+            for _ in 0..iterations {
+                bench_fn();
+            }
+        }
+
+        total_iterations += batch_size * (iterations as u64);
+        batch_size *= 2; // Exponential doubling
+    }
+
+    eprintln!(
+        "  Warmup: {}ms ({} iterations)",
+        start.elapsed().as_millis(),
+        total_iterations
+    );
+}
 
 pub fn measure_with_warmup<F>(
     name: String,
@@ -7,15 +35,13 @@ pub fn measure_with_warmup<F>(
     func: F,
     iterations: usize,
     samples: usize,
-    warmup_iterations: usize,
+    warmup_duration_secs: u64,
 ) -> BenchResult
 where
     F: Fn(),
 {
-    // Warmup phase
-    for _ in 0..warmup_iterations {
-        func();
-    }
+    // Perform time-based warmup
+    warmup_benchmark(&func, Duration::from_secs(warmup_duration_secs), iterations);
 
     measure_function_impl(name, module, func, iterations, samples)
 }
@@ -31,6 +57,10 @@ where
     F: Fn(),
 {
     let mut all_timings = Vec::with_capacity(samples);
+    let mut cpu_samples = Vec::with_capacity(samples);
+
+    // Initialize CPU monitor (will be no-op on non-Linux)
+    let monitor = CpuMonitor::new(0);
 
     for _ in 0..samples {
         let start = Instant::now();
@@ -39,6 +69,14 @@ where
         }
         let elapsed = start.elapsed();
         all_timings.push(elapsed);
+
+        // Capture CPU state after each sample
+        let snapshot = CpuSnapshot {
+            timestamp: Instant::now(),
+            frequency_khz: monitor.read_frequency(),
+            temperature_millic: monitor.read_temperature(),
+        };
+        cpu_samples.push(snapshot);
     }
 
     let percentiles = calculate_percentiles(&all_timings);
@@ -50,6 +88,7 @@ where
         samples,
         percentiles,
         all_timings,
+        cpu_samples,
     }
 }
 

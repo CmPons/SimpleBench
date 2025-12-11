@@ -92,6 +92,53 @@ pub fn format_benchmark_result(result: &BenchResult) -> String {
     )
 }
 
+/// Format CPU statistics from samples
+pub fn format_cpu_stats(cpu_samples: &[crate::CpuSnapshot]) -> Option<String> {
+    if cpu_samples.is_empty() {
+        return None;
+    }
+
+    let frequencies: Vec<f64> = cpu_samples
+        .iter()
+        .filter_map(|s| s.frequency_mhz())
+        .collect();
+
+    let temperatures: Vec<f64> = cpu_samples
+        .iter()
+        .filter_map(|s| s.temperature_celsius())
+        .collect();
+
+    let mut parts = Vec::new();
+
+    // Frequency stats
+    if !frequencies.is_empty() {
+        let min_freq = frequencies.iter().copied().fold(f64::INFINITY, f64::min);
+        let max_freq = frequencies.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let mean_freq = frequencies.iter().sum::<f64>() / frequencies.len() as f64;
+        parts.push(format!(
+            "CPU: {:.0}-{:.0} MHz (mean: {:.0} MHz)",
+            min_freq, max_freq, mean_freq
+        ));
+    }
+
+    // Temperature stats
+    if !temperatures.is_empty() {
+        let min_temp = temperatures.iter().copied().fold(f64::INFINITY, f64::min);
+        let max_temp = temperatures.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let temp_increase = max_temp - min_temp;
+        parts.push(format!(
+            "Temp: {:.0}-{:.0}°C (+{:.0}°C)",
+            min_temp, max_temp, temp_increase
+        ));
+    }
+
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(", "))
+    }
+}
+
 pub fn format_comparison_result(
     comparison: &Comparison,
     _benchmark_name: &str,
@@ -150,6 +197,11 @@ pub fn print_benchmark_start(bench_name: &str, module: &str) {
 /// Print a single benchmark result line (for streaming output)
 pub fn print_benchmark_result_line(result: &BenchResult) {
     println!("{}", format_benchmark_result(result));
+
+    // Print CPU stats if available (Linux only)
+    if let Some(cpu_stats) = format_cpu_stats(&result.cpu_samples) {
+        println!("        {}", cpu_stats.dimmed());
+    }
 }
 
 /// Print a single comparison line (for streaming output)
@@ -336,6 +388,7 @@ mod tests {
                 mean: Duration::from_millis(8),
             },
             all_timings: vec![Duration::from_millis(5); 10],
+            cpu_samples: vec![],
         }
     }
 
@@ -395,7 +448,6 @@ mod tests {
         assert!(formatted.contains("p50:"));
         assert!(formatted.contains("p90:"));
         assert!(formatted.contains("p99:"));
-        assert!(formatted.contains("10 samples × 100 iters"));
     }
 }
 

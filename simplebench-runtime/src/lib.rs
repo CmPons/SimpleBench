@@ -3,11 +3,15 @@ use std::time::{Duration, Instant};
 
 pub mod baseline;
 pub mod config;
+pub mod cpu_analysis;
+pub mod cpu_monitor;
 pub mod measurement;
 pub mod output;
 
 pub use baseline::*;
 pub use config::*;
+pub use cpu_analysis::*;
+pub use cpu_monitor::*;
 pub use measurement::*;
 pub use output::*;
 
@@ -44,6 +48,8 @@ pub struct BenchResult {
     pub samples: usize,
     pub percentiles: Percentiles,
     pub all_timings: Vec<Duration>,
+    #[serde(default)]
+    pub cpu_samples: Vec<CpuSnapshot>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,6 +78,10 @@ where
     F: Fn(),
 {
     let mut all_timings = Vec::with_capacity(samples);
+    let mut cpu_samples = Vec::with_capacity(samples);
+
+    // Initialize CPU monitor (will be no-op on non-Linux)
+    let monitor = CpuMonitor::new(0);
 
     for _ in 0..samples {
         let start = Instant::now();
@@ -80,6 +90,14 @@ where
         }
         let elapsed = start.elapsed();
         all_timings.push(elapsed);
+
+        // Capture CPU state after each sample
+        let snapshot = CpuSnapshot {
+            timestamp: Instant::now(),
+            frequency_khz: monitor.read_frequency(),
+            temperature_millic: monitor.read_temperature(),
+        };
+        cpu_samples.push(snapshot);
     }
 
     let percentiles = calculate_percentiles(&all_timings);
@@ -91,6 +109,7 @@ where
         samples,
         percentiles,
         all_timings,
+        cpu_samples,
     }
 }
 
@@ -229,7 +248,7 @@ pub fn run_all_benchmarks_with_config(config: &crate::config::BenchmarkConfig) -
             bench.func,
             config.measurement.iterations,
             config.measurement.samples,
-            config.measurement.warmup_iterations,
+            config.measurement.warmup_duration_secs,
         );
         results.push(result);
     }
@@ -257,6 +276,9 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
         ),
         Err(e) => println!("Failed to set core affinity {e:?}"),
     };
+
+    // Verify benchmark environment
+    crate::cpu_monitor::verify_benchmark_environment(0);
 
     let mut results = Vec::new();
     let mut comparisons = Vec::new();
@@ -289,7 +311,7 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
             bench.func,
             config.measurement.iterations,
             config.measurement.samples,
-            config.measurement.warmup_iterations,
+            config.measurement.warmup_duration_secs,
         );
 
         // Print benchmark result immediately
@@ -423,6 +445,7 @@ mod tests {
                 mean: Duration::from_millis(8),
             },
             all_timings: vec![],
+            cpu_samples: vec![],
         };
 
         let current = BenchResult {
@@ -437,6 +460,7 @@ mod tests {
                 mean: Duration::from_millis(8), // Same as baseline
             },
             all_timings: vec![],
+            cpu_samples: vec![],
         };
 
         let comparison = compare_with_baseline(&current, &baseline);
@@ -458,6 +482,7 @@ mod tests {
                 mean: Duration::from_millis(8),
             },
             all_timings: vec![],
+            cpu_samples: vec![],
         };
 
         let current = BenchResult {
@@ -472,6 +497,7 @@ mod tests {
                 mean: Duration::from_micros(9600), // 20% slower
             },
             all_timings: vec![],
+            cpu_samples: vec![],
         };
 
         let comparison = compare_with_baseline(&current, &baseline);
@@ -493,6 +519,7 @@ mod tests {
                 mean: Duration::from_millis(8),
             },
             all_timings: vec![],
+            cpu_samples: vec![],
         };
 
         let current = BenchResult {
@@ -507,6 +534,7 @@ mod tests {
                 mean: Duration::from_micros(6400), // 20% faster
             },
             all_timings: vec![],
+            cpu_samples: vec![],
         };
 
         let comparison = compare_with_baseline(&current, &baseline);

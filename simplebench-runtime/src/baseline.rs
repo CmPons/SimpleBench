@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use sha2::{Sha256, Digest};
-use crate::{BenchResult, Percentiles};
+use crate::{BenchResult, CpuSnapshot, Percentiles};
 use crate::config::ComparisonConfig;
 
 /// Get the MAC address of the primary network interface and hash it for privacy
@@ -57,6 +57,10 @@ pub struct BaselineData {
     #[serde(alias = "hostname")]
     pub machine_id: String,
 
+    // CPU monitoring data
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cpu_samples: Vec<CpuSnapshot>,
+
     // Legacy fields for backward compatibility (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub percentiles: Option<Percentiles>,
@@ -80,6 +84,7 @@ impl BaselineData {
             statistics,
             iterations: result.iterations,
             machine_id,
+            cpu_samples: result.cpu_samples.clone(),
             percentiles: Some(result.percentiles.clone()),
         }
     }
@@ -110,6 +115,7 @@ impl BaselineData {
             iterations: self.iterations,
             samples: self.samples.len(),
             all_timings,
+            cpu_samples: self.cpu_samples.clone(),
         }
     }
 }
