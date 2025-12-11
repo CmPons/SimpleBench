@@ -95,6 +95,7 @@ fn test_comparison_functionality() {
             mean: Duration::from_millis(8),
         },
         all_timings: vec![],
+        cpu_samples: vec![],
     };
 
     let current = BenchResult {
@@ -109,6 +110,7 @@ fn test_comparison_functionality() {
             mean: Duration::from_micros(10400),  // 30% slower than 8ms
         },
         all_timings: vec![],
+        cpu_samples: vec![],
     };
 
     let comparison = compare_with_baseline(&current, &baseline);

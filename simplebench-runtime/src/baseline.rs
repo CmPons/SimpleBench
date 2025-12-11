@@ -420,6 +420,7 @@ mod tests {
                 mean: Duration::from_millis(8),
             },
             all_timings: vec![Duration::from_millis(5); 10],
+            cpu_samples: vec![],
         }
     }
 
