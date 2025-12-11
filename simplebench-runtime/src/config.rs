@@ -48,10 +48,42 @@ pub struct ComparisonConfig {
     /// CI mode: fail on regressions
     #[serde(default)]
     pub ci_mode: bool,
+
+    /// Window size for historical comparison (default: 10)
+    #[serde(default = "default_window_size")]
+    pub window_size: usize,
+
+    /// Statistical confidence level (default: 0.95 = 95%)
+    #[serde(default = "default_confidence_level")]
+    pub confidence_level: f64,
+
+    /// Change point probability threshold (default: 0.8 = 80%)
+    #[serde(default = "default_cp_threshold")]
+    pub cp_threshold: f64,
+
+    /// Bayesian hazard rate (default: 0.1 = change every 10 runs)
+    #[serde(default = "default_hazard_rate")]
+    pub hazard_rate: f64,
 }
 
 fn default_threshold() -> f64 {
     5.0
+}
+
+fn default_window_size() -> usize {
+    10
+}
+
+fn default_confidence_level() -> f64 {
+    0.95
+}
+
+fn default_cp_threshold() -> f64 {
+    0.8
+}
+
+fn default_hazard_rate() -> f64 {
+    0.1
 }
 
 impl Default for ComparisonConfig {
@@ -59,6 +91,10 @@ impl Default for ComparisonConfig {
         Self {
             threshold: default_threshold(),
             ci_mode: false,
+            window_size: default_window_size(),
+            confidence_level: default_confidence_level(),
+            cp_threshold: default_cp_threshold(),
+            hazard_rate: default_hazard_rate(),
         }
     }
 }
@@ -130,6 +166,31 @@ impl BenchmarkConfig {
         if let Ok(threshold) = std::env::var("SIMPLEBENCH_THRESHOLD") {
             if let Ok(val) = threshold.parse() {
                 self.comparison.threshold = val;
+            }
+        }
+
+        // CPD-specific overrides
+        if let Ok(window) = std::env::var("SIMPLEBENCH_WINDOW") {
+            if let Ok(val) = window.parse() {
+                self.comparison.window_size = val;
+            }
+        }
+
+        if let Ok(confidence) = std::env::var("SIMPLEBENCH_CONFIDENCE") {
+            if let Ok(val) = confidence.parse() {
+                self.comparison.confidence_level = val;
+            }
+        }
+
+        if let Ok(cp_threshold) = std::env::var("SIMPLEBENCH_CP_THRESHOLD") {
+            if let Ok(val) = cp_threshold.parse() {
+                self.comparison.cp_threshold = val;
+            }
+        }
+
+        if let Ok(hazard_rate) = std::env::var("SIMPLEBENCH_HAZARD_RATE") {
+            if let Ok(val) = hazard_rate.parse() {
+                self.comparison.hazard_rate = val;
             }
         }
     }

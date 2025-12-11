@@ -71,10 +71,6 @@ fn bench_matrix_transform_batch() {
 
     // Simple rotation-like transformation
     for v in &vectors {
-        let _transformed = Vec3::new(
-            v.x * 0.866 - v.y * 0.5,
-            v.x * 0.5 + v.y * 0.866,
-            v.z,
-        );
+        let _transformed = Vec3::new(v.x * 0.866 - v.y * 0.5, v.x * 0.5 + v.y * 0.866, v.z);
     }
 }

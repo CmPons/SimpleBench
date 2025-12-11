@@ -19,6 +19,10 @@ struct RunConfig {
     warmup_duration: Option<u64>,
     threshold: Option<f64>,
     ci: bool,
+    window: Option<usize>,
+    confidence: Option<f64>,
+    cp_threshold: Option<f64>,
+    hazard_rate: Option<f64>,
 }
 
 /// SimpleBench - Simple microbenchmarking for Rust
@@ -62,6 +66,22 @@ enum Commands {
         /// Enable CI mode: fail on performance regressions
         #[arg(long)]
         ci: bool,
+
+        /// Window size for historical comparison (default: 10)
+        #[arg(long)]
+        window: Option<usize>,
+
+        /// Statistical confidence level (default: 0.95 = 95%)
+        #[arg(long)]
+        confidence: Option<f64>,
+
+        /// Change point probability threshold (default: 0.8 = 80%)
+        #[arg(long)]
+        cp_threshold: Option<f64>,
+
+        /// Bayesian hazard rate (default: 0.1 = change every 10 runs)
+        #[arg(long)]
+        hazard_rate: Option<f64>,
     },
 
     /// Clean existing benchmark results
@@ -120,6 +140,10 @@ fn main() -> Result<()> {
             warmup_duration,
             threshold,
             ci,
+            window,
+            confidence,
+            cp_threshold,
+            hazard_rate,
         }) => {
             // Explicit run command
             RunConfig {
@@ -129,6 +153,10 @@ fn main() -> Result<()> {
                 warmup_duration,
                 threshold,
                 ci,
+                window,
+                confidence,
+                cp_threshold,
+                hazard_rate,
             }
         }
         None => {
@@ -140,6 +168,10 @@ fn main() -> Result<()> {
                 warmup_duration: None,
                 threshold: None,
                 ci: false,
+                window: None,
+                confidence: None,
+                cp_threshold: None,
+                hazard_rate: None,
             }
         }
     };
@@ -255,6 +287,23 @@ fn main() -> Result<()> {
     // Pass benchmark filter to runner
     if let Some(filter) = run_config.bench_filter {
         cmd.env("SIMPLEBENCH_BENCH_FILTER", filter);
+    }
+
+    // Pass CPD configuration parameters
+    if let Some(window) = run_config.window {
+        cmd.env("SIMPLEBENCH_WINDOW", window.to_string());
+    }
+
+    if let Some(confidence) = run_config.confidence {
+        cmd.env("SIMPLEBENCH_CONFIDENCE", confidence.to_string());
+    }
+
+    if let Some(cp_threshold) = run_config.cp_threshold {
+        cmd.env("SIMPLEBENCH_CP_THRESHOLD", cp_threshold.to_string());
+    }
+
+    if let Some(hazard_rate) = run_config.hazard_rate {
+        cmd.env("SIMPLEBENCH_HAZARD_RATE", hazard_rate.to_string());
     }
 
     let status = cmd.status().context("Failed to execute runner")?;

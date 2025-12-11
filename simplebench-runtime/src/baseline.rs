@@ -66,10 +66,18 @@ pub struct BaselineData {
     // Legacy fields for backward compatibility (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub percentiles: Option<Percentiles>,
+
+    // Flag indicating this run was a detected regression
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub was_regression: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 impl BaselineData {
-    pub fn from_bench_result(result: &BenchResult, machine_id: String) -> Self {
+    pub fn from_bench_result(result: &BenchResult, machine_id: String, was_regression: bool) -> Self {
         // Convert Duration timings to u128 nanoseconds
         let samples: Vec<u128> = result.all_timings.iter().map(|d| d.as_nanos()).collect();
 
@@ -86,6 +94,7 @@ impl BaselineData {
             machine_id,
             cpu_samples: result.cpu_samples.clone(),
             percentiles: Some(result.percentiles.clone()),
+            was_regression,
         }
     }
 
@@ -193,10 +202,11 @@ impl BaselineManager {
         &self,
         crate_name: &str,
         result: &BenchResult,
+        was_regression: bool,
     ) -> Result<(), std::io::Error> {
         self.ensure_dir_exists(crate_name, &result.name)?;
 
-        let baseline = BaselineData::from_bench_result(result, self.machine_id.clone());
+        let baseline = BaselineData::from_bench_result(result, self.machine_id.clone(), was_regression);
         let json = serde_json::to_string_pretty(&baseline)?;
 
         let path = self.get_run_path(crate_name, &result.name);
@@ -336,6 +346,59 @@ impl BaselineManager {
 
         Ok(baselines)
     }
+
+    /// Load last N baseline runs for a benchmark
+    ///
+    /// Returns the most recent baseline runs in chronological order (oldest first).
+    /// **Excludes runs that were flagged as regressions** to keep the baseline clean.
+    /// This is used for statistical window comparison.
+    pub fn load_recent_baselines(
+        &self,
+        crate_name: &str,
+        benchmark_name: &str,
+        count: usize,
+    ) -> Result<Vec<BaselineData>, std::io::Error> {
+        let bench_dir = self.benchmark_dir(crate_name, benchmark_name);
+
+        if !bench_dir.exists() || !bench_dir.is_dir() {
+            return Ok(vec![]);
+        }
+
+        // List all run timestamps
+        let mut runs: Vec<_> = fs::read_dir(&bench_dir)?
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().map_or(false, |ext| ext == "json"))
+            .collect();
+
+        if runs.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Sort chronologically by filename (timestamps are sortable)
+        runs.sort_by_key(|e| e.file_name());
+
+        // Load baseline data, filtering out regressions
+        let mut baselines = Vec::new();
+        for entry in runs.iter().rev() {
+            // Stop once we have enough non-regression baselines
+            if baselines.len() >= count {
+                break;
+            }
+
+            let contents = fs::read_to_string(entry.path())?;
+            if let Ok(baseline) = serde_json::from_str::<BaselineData>(&contents) {
+                // Skip runs that were detected as regressions
+                if !baseline.was_regression {
+                    baselines.push(baseline);
+                }
+            }
+        }
+
+        // Reverse to get chronological order (oldest first)
+        baselines.reverse();
+
+        Ok(baselines)
+    }
 }
 
 impl Default for BaselineManager {
@@ -352,11 +415,114 @@ pub struct ComparisonResult {
     pub is_regression: bool,
 }
 
-/// Process benchmarks with baseline comparison
+/// Detect regression using statistical window + Bayesian Change Point Detection
+///
+/// This function combines three criteria for robust regression detection:
+/// 1. Statistical significance (outside confidence interval)
+/// 2. Practical significance (exceeds threshold percentage)
+/// 3. Change point probability (likely distribution shift)
+///
+/// All three conditions must be met for a regression to be flagged.
+pub fn detect_regression_with_cpd(
+    current: &crate::BenchResult,
+    historical: &[BaselineData],
+    threshold: f64,
+    confidence_level: f64,
+    cp_threshold: f64,
+    hazard_rate: f64,
+) -> ComparisonResult {
+    if historical.is_empty() {
+        return ComparisonResult {
+            benchmark_name: current.name.clone(),
+            comparison: None,
+            is_regression: false,
+        };
+    }
+
+    // Extract means from historical runs (in nanoseconds)
+    let historical_means: Vec<f64> = historical
+        .iter()
+        .map(|b| b.statistics.mean as f64)
+        .collect();
+
+    let current_mean = current.percentiles.mean.as_nanos() as f64;
+
+    // --- Statistical Window Analysis ---
+    let hist_mean = crate::statistics::mean(&historical_means);
+    let hist_stddev = crate::statistics::standard_deviation(&historical_means);
+
+    // Z-score: how many standard deviations away?
+    let z_score_value = crate::statistics::z_score(current_mean, hist_mean, hist_stddev);
+
+    // Confidence interval (one-tailed for regression detection)
+    let z_critical = if (confidence_level - 0.90).abs() < 0.01 {
+        1.282 // 90% one-tailed
+    } else if (confidence_level - 0.95).abs() < 0.01 {
+        1.645 // 95% one-tailed
+    } else if (confidence_level - 0.99).abs() < 0.01 {
+        2.326 // 99% one-tailed
+    } else {
+        1.96 // Default two-tailed 95%
+    };
+
+    let upper_bound = hist_mean + (z_critical * hist_stddev);
+    let lower_bound = hist_mean - (z_critical * hist_stddev);
+
+    // For regression, we only care if it's slower (above upper bound)
+    let statistically_significant = current_mean > upper_bound;
+
+    // --- Bayesian Change Point Detection ---
+    let change_probability =
+        crate::changepoint::bayesian_change_point_probability(current_mean, &historical_means, hazard_rate);
+
+    // --- Practical Significance ---
+    let percentage_change = ((current_mean - hist_mean) / hist_mean) * 100.0;
+    let practically_significant = percentage_change > threshold;
+
+    // --- Combined Decision ---
+    // Use tiered logic based on strength of statistical evidence:
+    //
+    // 1. EXTREME evidence (z-score > 5): Statistical + practical significance = regression
+    //    This catches acute performance disasters that are clearly not noise
+    //
+    // 2. STRONG evidence (z-score > 2): Require all three conditions
+    //    Statistical + practical + change point = regression
+    //    This is the normal case for real regressions
+    //
+    // 3. WEAK evidence (z-score <= 2): Not a regression
+    //    Likely just noise or natural variance, even if percentage is high
+
+    let is_regression = if z_score_value.abs() > 5.0 {
+        // Extreme statistical evidence: trust the statistics
+        statistically_significant && practically_significant
+    } else if z_score_value.abs() > 2.0 {
+        // Strong statistical evidence: require change point confirmation
+        statistically_significant && practically_significant && change_probability > cp_threshold
+    } else {
+        // Weak evidence: not a regression
+        false
+    };
+
+    ComparisonResult {
+        benchmark_name: current.name.clone(),
+        comparison: Some(crate::Comparison {
+            current_mean: current.percentiles.mean,
+            baseline_mean: Duration::from_nanos(hist_mean as u64),
+            percentage_change,
+            baseline_count: historical.len(),
+            z_score: Some(z_score_value),
+            confidence_interval: Some((lower_bound, upper_bound)),
+            change_probability: Some(change_probability),
+        }),
+        is_regression,
+    }
+}
+
+/// Process benchmarks with baseline comparison using CPD
 ///
 /// This function:
-/// 1. Loads existing baselines
-/// 2. Compares current results with baselines
+/// 1. Loads recent baseline runs (window-based)
+/// 2. Compares current results with historical data using statistical + Bayesian CPD
 /// 3. Saves new baselines
 /// 4. Returns comparison results
 pub fn process_with_baselines(
@@ -370,35 +536,37 @@ pub fn process_with_baselines(
         // Extract crate name from module path (first component)
         let crate_name = result.module.split("::").next().unwrap_or("unknown");
 
-        // Try to load baseline
-        let comparison_result = match baseline_manager.load_baseline(crate_name, &result.name)? {
-            Some(baseline_data) => {
-                let baseline = baseline_data.to_bench_result();
-                let comparison = crate::compare_with_baseline(result, &baseline);
+        // Load recent baselines (window-based comparison)
+        let historical = baseline_manager.load_recent_baselines(
+            crate_name,
+            &result.name,
+            config.window_size,
+        )?;
 
-                // Use configurable threshold
-                let is_regression = comparison.percentage_change > config.threshold;
-
-                ComparisonResult {
-                    benchmark_name: result.name.clone(),
-                    comparison: Some(comparison),
-                    is_regression,
-                }
-            }
-            None => {
-                // No baseline exists - first run
-                ComparisonResult {
-                    benchmark_name: result.name.clone(),
-                    comparison: None,
-                    is_regression: false,
-                }
+        let comparison_result = if !historical.is_empty() {
+            // Use CPD-based comparison
+            detect_regression_with_cpd(
+                result,
+                &historical,
+                config.threshold,
+                config.confidence_level,
+                config.cp_threshold,
+                config.hazard_rate,
+            )
+        } else {
+            // No baseline exists - first run
+            ComparisonResult {
+                benchmark_name: result.name.clone(),
+                comparison: None,
+                is_regression: false,
             }
         };
 
+        let is_regression = comparison_result.is_regression;
         comparisons.push(comparison_result);
 
-        // Save current result as baseline
-        baseline_manager.save_baseline(crate_name, result)?;
+        // Save current result as baseline with regression flag
+        baseline_manager.save_baseline(crate_name, result, is_regression)?;
     }
 
     Ok(comparisons)
@@ -457,7 +625,7 @@ mod tests {
         let result = create_test_result("test_bench");
         let machine_id = "0123456789abcdef".to_string(); // 16-char hex hash
 
-        let baseline = BaselineData::from_bench_result(&result, machine_id.clone());
+        let baseline = BaselineData::from_bench_result(&result, machine_id.clone(), false);
 
         assert_eq!(baseline.benchmark_name, "test_bench");
         assert_eq!(baseline.module, "test_module");
@@ -480,7 +648,7 @@ mod tests {
         let result = create_test_result("test_bench");
 
         // Save baseline
-        manager.save_baseline("my_crate", &result).unwrap();
+        manager.save_baseline("my_crate", &result, false).unwrap();
 
         // Load baseline
         let loaded = manager.load_baseline("my_crate", "test_bench").unwrap();
@@ -511,7 +679,7 @@ mod tests {
 
         assert!(!manager.has_baseline("my_crate", "test_bench"));
 
-        manager.save_baseline("my_crate", &result).unwrap();
+        manager.save_baseline("my_crate", &result, false).unwrap();
 
         assert!(manager.has_baseline("my_crate", "test_bench"));
     }
@@ -524,8 +692,8 @@ mod tests {
         let result1 = create_test_result("bench1");
         let result2 = create_test_result("bench2");
 
-        manager.save_baseline("my_crate", &result1).unwrap();
-        manager.save_baseline("my_crate", &result2).unwrap();
+        manager.save_baseline("my_crate", &result1, false).unwrap();
+        manager.save_baseline("my_crate", &result2, false).unwrap();
 
         let mut baselines = manager.list_baselines("my_crate").unwrap();
         baselines.sort();

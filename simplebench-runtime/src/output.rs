@@ -159,35 +159,62 @@ pub fn format_comparison_result(
     let baseline_str = format_duration_human_readable(comparison.baseline_mean);
     let current_str = format_duration_human_readable(comparison.current_mean);
 
-    if is_regression {
+    // Build baseline count suffix if available
+    let baseline_suffix = if comparison.baseline_count > 1 {
+        format!(" (n={})", comparison.baseline_count)
+    } else {
+        String::new()
+    };
+
+    let base_line = if is_regression {
         format!(
-            "        {} {} {} (mean: {} -> {})",
+            "        {} {} {} (mean: {} -> {}{})",
             "REGRESS".red().bold(),
             change_symbol,
             percentage_str.red().bold(),
             baseline_str.dimmed(),
-            current_str.red()
+            current_str.red(),
+            baseline_suffix.dimmed()
         )
     } else if comparison.percentage_change < -5.0 {
         // Show improvements of >5% in green
         format!(
-            "        {} {} {} (mean: {} -> {})",
+            "        {} {} {} (mean: {} -> {}{})",
             "IMPROVE".green().bold(),
             change_symbol,
             percentage_str.green(),
             baseline_str.dimmed(),
-            current_str.green()
+            current_str.green(),
+            baseline_suffix.dimmed()
         )
     } else {
         // Minor changes in yellow
         format!(
-            "        {} {} {} (mean: {} -> {})",
+            "        {} {} {} (mean: {} -> {}{})",
             "STABLE".cyan(),
             change_symbol,
             percentage_str.dimmed(),
             baseline_str.dimmed(),
-            current_str.dimmed()
+            current_str.dimmed(),
+            baseline_suffix.dimmed()
         )
+    };
+
+    // Add statistical info if available
+    let mut stats_parts = Vec::new();
+
+    if let Some(z_score) = comparison.z_score {
+        stats_parts.push(format!("z={:.2}", z_score));
+    }
+
+    if let Some(cp_prob) = comparison.change_probability {
+        stats_parts.push(format!("cp={:.0}%", cp_prob * 100.0));
+    }
+
+    if !stats_parts.is_empty() {
+        format!("{}\n        {}", base_line, stats_parts.join(", ").dimmed())
+    } else {
+        base_line
     }
 }
 

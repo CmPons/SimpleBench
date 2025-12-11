@@ -2,18 +2,22 @@ use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
 pub mod baseline;
+pub mod changepoint;
 pub mod config;
 pub mod cpu_analysis;
 pub mod cpu_monitor;
 pub mod measurement;
 pub mod output;
+pub mod statistics;
 
 pub use baseline::*;
+pub use changepoint::*;
 pub use config::*;
 pub use cpu_analysis::*;
 pub use cpu_monitor::*;
 pub use measurement::*;
 pub use output::*;
+pub use statistics::*;
 
 // Re-export inventory for use by the macro
 pub use inventory;
@@ -61,6 +65,14 @@ pub struct Comparison {
     pub current_mean: Duration,
     pub baseline_mean: Duration,
     pub percentage_change: f64,
+    #[serde(default)]
+    pub baseline_count: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub z_score: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence_interval: Option<(f64, f64)>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change_probability: Option<f64>,
 }
 
 pub struct SimpleBench {
@@ -220,6 +232,10 @@ pub fn compare_with_baseline(current: &BenchResult, baseline: &BenchResult) -> C
         current_mean: current.percentiles.mean,
         baseline_mean: baseline.percentiles.mean,
         percentage_change,
+        baseline_count: 1, // Single baseline comparison
+        z_score: None,
+        confidence_interval: None,
+        change_probability: None,
     }
 }
 
@@ -358,35 +374,49 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
         // Print benchmark result immediately
         print_benchmark_result_line(&result);
 
-        // Compare with baseline and print comparison
+        // Compare with baseline using CPD and print comparison
         if let Some(ref bm) = baseline_manager {
             let crate_name = result.module.split("::").next().unwrap_or("unknown");
 
-            if let Ok(Some(baseline_data)) = bm.load_baseline(crate_name, &result.name) {
-                let baseline = baseline_data.to_bench_result();
-                let comparison = compare_with_baseline(&result, &baseline);
-                let is_regression = comparison.percentage_change > config.comparison.threshold;
+            // Load recent baselines for window-based comparison
+            let mut is_regression = false;
+            if let Ok(historical) = bm.load_recent_baselines(
+                crate_name,
+                &result.name,
+                config.comparison.window_size,
+            ) {
+                if !historical.is_empty() {
+                    // Use CPD-based comparison
+                    let comparison_result = crate::baseline::detect_regression_with_cpd(
+                        &result,
+                        &historical,
+                        config.comparison.threshold,
+                        config.comparison.confidence_level,
+                        config.comparison.cp_threshold,
+                        config.comparison.hazard_rate,
+                    );
 
-                print_comparison_line(&comparison, &result.name, is_regression);
+                    is_regression = comparison_result.is_regression;
 
-                comparisons.push(ComparisonResult {
-                    benchmark_name: result.name.clone(),
-                    comparison: Some(comparison),
-                    is_regression,
-                });
-            } else {
-                // First run - no baseline
-                print_new_baseline_line(&result.name);
+                    if let Some(ref comparison) = comparison_result.comparison {
+                        print_comparison_line(comparison, &result.name, comparison_result.is_regression);
+                    }
 
-                comparisons.push(ComparisonResult {
-                    benchmark_name: result.name.clone(),
-                    comparison: None,
-                    is_regression: false,
-                });
+                    comparisons.push(comparison_result);
+                } else {
+                    // First run - no baseline
+                    print_new_baseline_line(&result.name);
+
+                    comparisons.push(ComparisonResult {
+                        benchmark_name: result.name.clone(),
+                        comparison: None,
+                        is_regression: false,
+                    });
+                }
             }
 
-            // Save new baseline
-            if let Err(e) = bm.save_baseline(crate_name, &result) {
+            // Save new baseline with regression flag
+            if let Err(e) = bm.save_baseline(crate_name, &result, is_regression) {
                 eprintln!(
                     "Warning: Failed to save baseline for {}: {}",
                     result.name, e
