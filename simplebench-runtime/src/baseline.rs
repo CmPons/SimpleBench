@@ -116,6 +116,8 @@ impl BaselineData {
             samples: self.samples.len(),
             all_timings,
             cpu_samples: self.cpu_samples.clone(),
+            warmup_ms: None,
+            warmup_iterations: None,
         }
     }
 }

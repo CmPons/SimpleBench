@@ -151,51 +151,63 @@ impl Default for CpuSnapshot {
 
 /// Verify and report benchmark environment
 pub fn verify_benchmark_environment(cpu_core: usize) {
-    eprintln!("Verifying benchmark environment...");
+    use colored::*;
+
+    println!("{}", "Verifying benchmark environment...".green().bold());
 
     #[cfg(target_os = "linux")]
     {
-        eprintln!("  Platform: Linux (full monitoring support)");
+        println!("  {} {}", "Platform:".dimmed(), "Linux (full monitoring support)".cyan());
 
         let monitor = CpuMonitor::new(cpu_core);
 
         // Check governor
         if let Some(governor) = monitor.read_governor() {
-            eprintln!("  CPU {} governor: {}", cpu_core, governor);
-            if governor != "performance" {
-                eprintln!("    ⚠ WARNING: Not using 'performance' governor");
-                eprintln!("    Consider: sudo cpupower frequency-set -g performance");
+            print!("  {} {} {}", "CPU".dimmed(), cpu_core, "governor:".dimmed());
+            if governor == "performance" {
+                println!(" {}", governor.green());
+            } else {
+                println!(" {}", governor.yellow());
+                println!("    {} {}", "⚠".yellow(), "Not using 'performance' governor".yellow());
+                println!("    {} {}", "Consider:".dimmed(), "sudo cpupower frequency-set -g performance".dimmed());
             }
         }
 
         // Check frequency range
         if let Some((min_khz, max_khz)) = monitor.read_frequency_range() {
-            eprintln!(
-                "  CPU {} frequency range: {} MHz - {} MHz",
+            println!(
+                "  {} {} {} {} {} {} {}",
+                "CPU".dimmed(),
                 cpu_core,
-                min_khz / 1000,
-                max_khz / 1000
+                "frequency range:".dimmed(),
+                (min_khz / 1000).to_string().cyan(),
+                "MHz -".dimmed(),
+                (max_khz / 1000).to_string().cyan(),
+                "MHz".dimmed()
             );
         }
 
         // Check current frequency
         if let Some(freq_khz) = monitor.read_frequency() {
-            eprintln!(
-                "  CPU {} current frequency: {} MHz",
+            println!(
+                "  {} {} {} {} {}",
+                "CPU".dimmed(),
                 cpu_core,
-                freq_khz / 1000
+                "current frequency:".dimmed(),
+                (freq_khz / 1000).to_string().cyan(),
+                "MHz".dimmed()
             );
         }
 
         // Check thermal zones
         let zones = CpuMonitor::discover_thermal_zones();
         if !zones.is_empty() {
-            eprintln!("  Found {} thermal zone(s)", zones.len());
+            println!("  {} {} {}", "Found".dimmed(), zones.len().to_string().cyan(), "thermal zone(s)".dimmed());
             for zone in zones.iter().take(3) {
                 let path = format!("/sys/class/thermal/thermal_zone{}/temp", zone);
                 if let Ok(temp_str) = fs::read_to_string(path) {
                     if let Ok(temp_millic) = temp_str.trim().parse::<i32>() {
-                        eprintln!("    Zone {}: {}°C", zone, temp_millic / 1000);
+                        println!("    {} {} {}°C", "Zone".dimmed(), zone, (temp_millic / 1000).to_string().cyan());
                     }
                 }
             }
@@ -205,11 +217,11 @@ pub fn verify_benchmark_environment(cpu_core: usize) {
     #[cfg(not(target_os = "linux"))]
     {
         let os = std::env::consts::OS;
-        eprintln!("  Platform: {} (limited monitoring support)", os);
-        eprintln!("    ℹ CPU frequency/thermal monitoring not available on this platform");
+        println!("  {} {} {}", "Platform:".dimmed(), os.cyan(), "(limited monitoring support)".dimmed());
+        println!("    {} {}", "ℹ".blue(), "CPU frequency/thermal monitoring not available on this platform".dimmed());
     }
 
-    eprintln!("Environment check complete.\n");
+    println!("{}\n", "Environment check complete.".green());
 }
 
 #[cfg(test)]

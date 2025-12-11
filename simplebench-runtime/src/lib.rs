@@ -50,6 +50,10 @@ pub struct BenchResult {
     pub all_timings: Vec<Duration>,
     #[serde(default)]
     pub cpu_samples: Vec<CpuSnapshot>,
+    #[serde(skip)]
+    pub warmup_ms: Option<u128>,
+    #[serde(skip)]
+    pub warmup_iterations: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -110,6 +114,8 @@ where
         percentiles,
         all_timings,
         cpu_samples,
+        warmup_ms: None,
+        warmup_iterations: None,
     }
 }
 

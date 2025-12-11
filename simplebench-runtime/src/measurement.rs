@@ -2,7 +2,8 @@ use crate::{calculate_percentiles, BenchResult, CpuMonitor, CpuSnapshot};
 use std::time::{Duration, Instant};
 
 /// Warmup benchmark using time-based exponential doubling (Criterion-style)
-fn warmup_benchmark<F>(bench_fn: &F, warmup_duration: Duration, iterations: usize)
+/// Returns (elapsed_ms, total_iterations) for reporting
+fn warmup_benchmark<F>(bench_fn: &F, warmup_duration: Duration, iterations: usize) -> (u128, u64)
 where
     F: Fn(),
 {
@@ -22,11 +23,7 @@ where
         batch_size *= 2; // Exponential doubling
     }
 
-    eprintln!(
-        "  Warmup: {}ms ({} iterations)",
-        start.elapsed().as_millis(),
-        total_iterations
-    );
+    (start.elapsed().as_millis(), total_iterations)
 }
 
 pub fn measure_with_warmup<F>(
@@ -40,10 +37,16 @@ pub fn measure_with_warmup<F>(
 where
     F: Fn(),
 {
-    // Perform time-based warmup
-    warmup_benchmark(&func, Duration::from_secs(warmup_duration_secs), iterations);
+    // Perform time-based warmup and store stats
+    let (warmup_ms, warmup_iters) = warmup_benchmark(&func, Duration::from_secs(warmup_duration_secs), iterations);
 
-    measure_function_impl(name, module, func, iterations, samples)
+    let mut result = measure_function_impl(name, module, func, iterations, samples);
+
+    // Store warmup stats in result for later printing
+    result.warmup_ms = Some(warmup_ms);
+    result.warmup_iterations = Some(warmup_iters);
+
+    result
 }
 
 pub fn measure_function_impl<F>(
@@ -89,6 +92,8 @@ where
         percentiles,
         all_timings,
         cpu_samples,
+        warmup_ms: None,
+        warmup_iterations: None,
     }
 }
 

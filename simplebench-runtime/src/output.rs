@@ -198,6 +198,16 @@ pub fn print_benchmark_start(bench_name: &str, module: &str) {
 pub fn print_benchmark_result_line(result: &BenchResult) {
     println!("{}", format_benchmark_result(result));
 
+    // Print warmup stats if available
+    if let (Some(warmup_ms), Some(warmup_iters)) = (result.warmup_ms, result.warmup_iterations) {
+        println!(
+            "        {} {}ms ({} iterations)",
+            "Warmup:".dimmed(),
+            warmup_ms,
+            warmup_iters
+        );
+    }
+
     // Print CPU stats if available (Linux only)
     if let Some(cpu_stats) = format_cpu_stats(&result.cpu_samples) {
         println!("        {}", cpu_stats.dimmed());
