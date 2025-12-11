@@ -18,7 +18,7 @@ pub use output::*;
 // Re-export inventory for use by the macro
 pub use inventory;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Percentiles {
     pub p50: Duration,
     pub p90: Duration,
@@ -40,7 +40,7 @@ pub struct Statistics {
     pub sample_count: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BenchResult {
     pub name: String,
     pub module: String,
@@ -498,6 +498,7 @@ mod tests {
             },
             all_timings: vec![],
             cpu_samples: vec![],
+            ..Default::default()
         };
 
         let current = BenchResult {
@@ -513,6 +514,7 @@ mod tests {
             },
             all_timings: vec![],
             cpu_samples: vec![],
+            ..Default::default()
         };
 
         let comparison = compare_with_baseline(&current, &baseline);
@@ -535,6 +537,7 @@ mod tests {
             },
             all_timings: vec![],
             cpu_samples: vec![],
+            ..Default::default()
         };
 
         let current = BenchResult {
@@ -550,6 +553,7 @@ mod tests {
             },
             all_timings: vec![],
             cpu_samples: vec![],
+            ..Default::default()
         };
 
         let comparison = compare_with_baseline(&current, &baseline);
@@ -572,6 +576,7 @@ mod tests {
             },
             all_timings: vec![],
             cpu_samples: vec![],
+            ..Default::default()
         };
 
         let current = BenchResult {
@@ -587,6 +592,7 @@ mod tests {
             },
             all_timings: vec![],
             cpu_samples: vec![],
+            ..Default::default()
         };
 
         let comparison = compare_with_baseline(&current, &baseline);

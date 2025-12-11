@@ -29,14 +29,30 @@ fn test_benchmarks_are_registered() {
     let results = run_all_benchmarks(100, 10);
 
     // Should have at least our 4 test benchmarks
-    assert!(results.len() >= 4, "Expected at least 4 benchmarks, got {}", results.len());
+    assert!(
+        results.len() >= 4,
+        "Expected at least 4 benchmarks, got {}",
+        results.len()
+    );
 
     // Check that our benchmarks are present
     let bench_names: Vec<&str> = results.iter().map(|r| r.name.as_str()).collect();
-    assert!(bench_names.contains(&"bench_addition"), "bench_addition not found");
-    assert!(bench_names.contains(&"bench_multiplication"), "bench_multiplication not found");
-    assert!(bench_names.contains(&"bench_vector_allocation"), "bench_vector_allocation not found");
-    assert!(bench_names.contains(&"bench_string_concatenation"), "bench_string_concatenation not found");
+    assert!(
+        bench_names.contains(&"bench_addition"),
+        "bench_addition not found"
+    );
+    assert!(
+        bench_names.contains(&"bench_multiplication"),
+        "bench_multiplication not found"
+    );
+    assert!(
+        bench_names.contains(&"bench_vector_allocation"),
+        "bench_vector_allocation not found"
+    );
+    assert!(
+        bench_names.contains(&"bench_string_concatenation"),
+        "bench_string_concatenation not found"
+    );
 }
 
 #[test]
@@ -68,13 +84,21 @@ fn test_benchmark_timings_are_reasonable() {
     for result in &results {
         // All timings should be non-zero (we did some work)
         for timing in &result.all_timings {
-            assert!(timing.as_nanos() > 0, "Timing should be > 0 for {}", result.name);
+            assert!(
+                timing.as_nanos() > 0,
+                "Timing should be > 0 for {}",
+                result.name
+            );
         }
 
         // Timings should be reasonable (not absurdly large)
         // For simple operations, even with 10 iterations, should be under 1 second
-        assert!(result.percentiles.p99.as_secs() < 1,
-                "Timing too large for {} (p99: {:?})", result.name, result.percentiles.p99);
+        assert!(
+            result.percentiles.p99.as_secs() < 1,
+            "Timing too large for {} (p99: {:?})",
+            result.name,
+            result.percentiles.p99
+        );
     }
 }
 
@@ -96,6 +120,7 @@ fn test_comparison_functionality() {
         },
         all_timings: vec![],
         cpu_samples: vec![],
+        ..Default::default()
     };
 
     let current = BenchResult {
@@ -107,10 +132,11 @@ fn test_comparison_functionality() {
             p50: Duration::from_millis(5),
             p90: Duration::from_millis(13),
             p99: Duration::from_millis(15),
-            mean: Duration::from_micros(10400),  // 30% slower than 8ms
+            mean: Duration::from_micros(10400), // 30% slower than 8ms
         },
         all_timings: vec![],
         cpu_samples: vec![],
+        ..Default::default()
     };
 
     let comparison = compare_with_baseline(&current, &baseline);
@@ -120,7 +146,7 @@ fn test_comparison_functionality() {
 
 #[test]
 fn test_json_serialization() {
-    use simplebench_runtime::{save_result_to_file, load_result_from_file};
+    use simplebench_runtime::{load_result_from_file, save_result_to_file};
     use tempfile::NamedTempFile;
 
     let results = run_all_benchmarks(50, 5);
@@ -140,3 +166,4 @@ fn test_json_serialization() {
         assert_eq!(result.samples, loaded.samples);
     }
 }
+

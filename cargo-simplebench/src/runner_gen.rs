@@ -24,7 +24,7 @@ pub fn generate_runner(benchmark_crates: &[BenchmarkCrate]) -> String {
         code.push_str(&format!("extern crate {};\n", crate_name));
     }
 
-    code.push_str("\n");
+    code.push('\n');
 
     // Add main function
     code.push_str("fn main() {\n");
@@ -36,7 +36,9 @@ pub fn generate_runner(benchmark_crates: &[BenchmarkCrate]) -> String {
     code.push_str("    };\n\n");
 
     code.push_str("    // Change to workspace root for baseline storage\n");
-    code.push_str("    if let Ok(workspace_root) = std::env::var(\"SIMPLEBENCH_WORKSPACE_ROOT\") {\n");
+    code.push_str(
+        "    if let Ok(workspace_root) = std::env::var(\"SIMPLEBENCH_WORKSPACE_ROOT\") {\n",
+    );
     code.push_str("        if let Err(e) = std::env::set_current_dir(&workspace_root) {\n");
     code.push_str("            eprintln!(\"Failed to change to workspace root: {}\", e);\n");
     code.push_str("            std::process::exit(1);\n");
@@ -59,7 +61,9 @@ pub fn generate_runner(benchmark_crates: &[BenchmarkCrate]) -> String {
     code.push_str("    // Note: comparisons are handled inside run_and_stream_benchmarks\n");
     code.push_str("    if config.comparison.ci_mode {\n");
     code.push_str("        // Re-check baselines for CI exit code\n");
-    code.push_str("        if let Ok(comparisons) = process_with_baselines(&results, &config.comparison) {\n");
+    code.push_str(
+        "        if let Ok(comparisons) = process_with_baselines(&results, &config.comparison) {\n",
+    );
     code.push_str("            check_regressions_and_exit(&comparisons, &config.comparison);\n");
     code.push_str("        }\n");
     code.push_str("    }\n");
@@ -69,7 +73,10 @@ pub fn generate_runner(benchmark_crates: &[BenchmarkCrate]) -> String {
 }
 
 /// Write runner.rs to a file
-pub fn write_runner(target_dir: &Path, benchmark_crates: &[BenchmarkCrate]) -> Result<std::path::PathBuf, std::io::Error> {
+pub fn write_runner(
+    target_dir: &Path,
+    benchmark_crates: &[BenchmarkCrate],
+) -> Result<std::path::PathBuf, std::io::Error> {
     let runner_code = generate_runner(benchmark_crates);
     let runner_path = target_dir.join("simplebench_runner.rs");
     std::fs::write(&runner_path, runner_code)?;

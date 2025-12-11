@@ -113,7 +113,10 @@ pub fn format_cpu_stats(cpu_samples: &[crate::CpuSnapshot]) -> Option<String> {
     // Frequency stats
     if !frequencies.is_empty() {
         let min_freq = frequencies.iter().copied().fold(f64::INFINITY, f64::min);
-        let max_freq = frequencies.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let max_freq = frequencies
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
         let mean_freq = frequencies.iter().sum::<f64>() / frequencies.len() as f64;
         parts.push(format!(
             "CPU: {:.0}-{:.0} MHz (mean: {:.0} MHz)",
@@ -124,7 +127,10 @@ pub fn format_cpu_stats(cpu_samples: &[crate::CpuSnapshot]) -> Option<String> {
     // Temperature stats
     if !temperatures.is_empty() {
         let min_temp = temperatures.iter().copied().fold(f64::INFINITY, f64::min);
-        let max_temp = temperatures.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let max_temp = temperatures
+            .iter()
+            .copied()
+            .fold(f64::NEG_INFINITY, f64::max);
         let temp_increase = max_temp - min_temp;
         parts.push(format!(
             "Temp: {:.0}-{:.0}°C (+{:.0}°C)",
@@ -399,6 +405,7 @@ mod tests {
             },
             all_timings: vec![Duration::from_millis(5); 10],
             cpu_samples: vec![],
+            ..Default::default()
         }
     }
 
@@ -460,4 +467,3 @@ mod tests {
         assert!(formatted.contains("p99:"));
     }
 }
-

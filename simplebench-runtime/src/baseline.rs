@@ -1,27 +1,29 @@
+use crate::config::ComparisonConfig;
+use crate::{BenchResult, CpuSnapshot, Percentiles};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
-use crate::{BenchResult, CpuSnapshot, Percentiles};
-use crate::config::ComparisonConfig;
 
 /// Get the MAC address of the primary network interface and hash it for privacy
 ///
 /// Returns a SHA256 hash (first 16 hex characters) of the MAC address to serve as
 /// a stable machine identifier without exposing the actual MAC address.
 fn get_primary_mac_address() -> Result<String, std::io::Error> {
-    let interface = default_net::get_default_interface()
-        .map_err(|e| std::io::Error::new(
+    let interface = default_net::get_default_interface().map_err(|e| {
+        std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Failed to get default network interface: {}", e)
-        ))?;
+            format!("Failed to get default network interface: {}", e),
+        )
+    })?;
 
-    let mac_addr = interface.mac_addr
-        .ok_or_else(|| std::io::Error::new(
+    let mac_addr = interface.mac_addr.ok_or_else(|| {
+        std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            "Default interface has no MAC address"
-        ))?;
+            "Default interface has no MAC address",
+        )
+    })?;
 
     // Format as lowercase with dashes: aa-bb-cc-dd-ee-ff
     // The default format uses colons, so replace them with dashes
@@ -69,9 +71,7 @@ pub struct BaselineData {
 impl BaselineData {
     pub fn from_bench_result(result: &BenchResult, machine_id: String) -> Self {
         // Convert Duration timings to u128 nanoseconds
-        let samples: Vec<u128> = result.all_timings.iter()
-            .map(|d| d.as_nanos())
-            .collect();
+        let samples: Vec<u128> = result.all_timings.iter().map(|d| d.as_nanos()).collect();
 
         // Calculate comprehensive statistics
         let statistics = crate::calculate_statistics(&samples);
@@ -104,7 +104,9 @@ impl BaselineData {
         };
 
         // Convert samples back to Duration
-        let all_timings: Vec<Duration> = self.samples.iter()
+        let all_timings: Vec<Duration> = self
+            .samples
+            .iter()
             .map(|&ns| Duration::from_nanos(ns as u64))
             .collect();
 
@@ -173,16 +175,25 @@ impl BaselineManager {
     fn get_run_path(&self, crate_name: &str, benchmark_name: &str) -> PathBuf {
         let timestamp = chrono::Utc::now().format("%Y-%m-%dT%H-%M-%S");
         let filename = format!("{}.json", timestamp);
-        self.benchmark_dir(crate_name, benchmark_name).join(filename)
+        self.benchmark_dir(crate_name, benchmark_name)
+            .join(filename)
     }
 
     /// Ensure the baseline directory exists
-    fn ensure_dir_exists(&self, crate_name: &str, benchmark_name: &str) -> Result<(), std::io::Error> {
+    fn ensure_dir_exists(
+        &self,
+        crate_name: &str,
+        benchmark_name: &str,
+    ) -> Result<(), std::io::Error> {
         fs::create_dir_all(self.benchmark_dir(crate_name, benchmark_name))
     }
 
     /// Save a benchmark result as a baseline (creates new timestamped file)
-    pub fn save_baseline(&self, crate_name: &str, result: &BenchResult) -> Result<(), std::io::Error> {
+    pub fn save_baseline(
+        &self,
+        crate_name: &str,
+        result: &BenchResult,
+    ) -> Result<(), std::io::Error> {
         self.ensure_dir_exists(crate_name, &result.name)?;
 
         let baseline = BaselineData::from_bench_result(result, self.machine_id.clone());
@@ -195,7 +206,11 @@ impl BaselineManager {
     }
 
     /// Load the most recent baseline for a specific benchmark
-    pub fn load_baseline(&self, crate_name: &str, benchmark_name: &str) -> Result<Option<BaselineData>, std::io::Error> {
+    pub fn load_baseline(
+        &self,
+        crate_name: &str,
+        benchmark_name: &str,
+    ) -> Result<Option<BaselineData>, std::io::Error> {
         let bench_dir = self.benchmark_dir(crate_name, benchmark_name);
 
         // Check if new directory structure exists
@@ -236,11 +251,16 @@ impl BaselineManager {
         if bench_dir.exists() && bench_dir.is_dir() {
             return true;
         }
-        self.legacy_baseline_path(crate_name, benchmark_name).exists()
+        self.legacy_baseline_path(crate_name, benchmark_name)
+            .exists()
     }
 
     /// List all run timestamps for a specific benchmark
-    pub fn list_runs(&self, crate_name: &str, benchmark_name: &str) -> Result<Vec<String>, std::io::Error> {
+    pub fn list_runs(
+        &self,
+        crate_name: &str,
+        benchmark_name: &str,
+    ) -> Result<Vec<String>, std::io::Error> {
         let bench_dir = self.benchmark_dir(crate_name, benchmark_name);
 
         if !bench_dir.exists() || !bench_dir.is_dir() {
@@ -263,7 +283,12 @@ impl BaselineManager {
     }
 
     /// Load a specific run by timestamp
-    pub fn load_run(&self, crate_name: &str, benchmark_name: &str, timestamp: &str) -> Result<Option<BaselineData>, std::io::Error> {
+    pub fn load_run(
+        &self,
+        crate_name: &str,
+        benchmark_name: &str,
+        timestamp: &str,
+    ) -> Result<Option<BaselineData>, std::io::Error> {
         let bench_dir = self.benchmark_dir(crate_name, benchmark_name);
         let filename = format!("{}.json", timestamp);
         let path = bench_dir.join(filename);
@@ -295,10 +320,7 @@ impl BaselineManager {
             // Check for new directory structure
             if name.starts_with(&prefix) && entry.path().is_dir() {
                 // Extract benchmark name from directory name
-                let benchmark_name = name
-                    .strip_prefix(&prefix)
-                    .unwrap_or(&name)
-                    .to_string();
+                let benchmark_name = name.strip_prefix(&prefix).unwrap_or(&name).to_string();
                 baselines.push(benchmark_name);
             }
             // Check for legacy single-file format
@@ -395,9 +417,12 @@ pub fn check_regressions_and_exit(comparisons: &[ComparisonResult], config: &Com
         eprintln!();
         eprintln!(
             "{}",
-            format!("FAILED: Performance regression detected (threshold: {}%)", config.threshold)
-                .red()
-                .bold()
+            format!(
+                "FAILED: Performance regression detected (threshold: {}%)",
+                config.threshold
+            )
+            .red()
+            .bold()
         );
         std::process::exit(1);
     }
@@ -423,6 +448,7 @@ mod tests {
             },
             all_timings: vec![Duration::from_millis(5); 10],
             cpu_samples: vec![],
+            ..Default::default()
         }
     }
 
@@ -518,24 +544,43 @@ mod tests {
         let machine_id = result.unwrap();
 
         // Should be 16 characters (first 16 chars of SHA256 hex digest)
-        assert_eq!(machine_id.len(), 16, "Machine ID should be 16 characters: {}", machine_id);
+        assert_eq!(
+            machine_id.len(),
+            16,
+            "Machine ID should be 16 characters: {}",
+            machine_id
+        );
 
         // Should be lowercase hex
-        assert_eq!(machine_id, machine_id.to_lowercase(), "Machine ID should be lowercase");
-        assert!(machine_id.chars().all(|c| c.is_ascii_hexdigit()),
-                "Machine ID should contain only hex digits");
+        assert_eq!(
+            machine_id,
+            machine_id.to_lowercase(),
+            "Machine ID should be lowercase"
+        );
+        assert!(
+            machine_id.chars().all(|c| c.is_ascii_hexdigit()),
+            "Machine ID should contain only hex digits"
+        );
     }
 
     #[test]
     fn test_mac_address_format() {
         // Test that BaselineManager can be created successfully
         let manager_result = BaselineManager::new();
-        assert!(manager_result.is_ok(), "Failed to create BaselineManager: {:?}", manager_result);
+        assert!(
+            manager_result.is_ok(),
+            "Failed to create BaselineManager: {:?}",
+            manager_result
+        );
 
         let manager = manager_result.unwrap();
 
         // Verify machine_id is properly formatted (16 character hex hash)
-        assert_eq!(manager.machine_id.len(), 16, "Machine ID should be 16 characters");
+        assert_eq!(
+            manager.machine_id.len(),
+            16,
+            "Machine ID should be 16 characters"
+        );
         assert_eq!(manager.machine_id, manager.machine_id.to_lowercase());
         assert!(manager.machine_id.chars().all(|c| c.is_ascii_hexdigit()));
     }
