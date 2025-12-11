@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use colored::*;
 use simplebench_runtime::baseline::BaselineManager;
-use simplebench_runtime::Statistics;
+use simplebench_runtime::{CpuAnalysis, Statistics};
 use std::path::Path;
 
 pub fn run_analysis(
@@ -72,6 +72,13 @@ fn analyze_single_run(
     println!();
 
     print_statistics(&run_data.statistics);
+
+    // Print CPU analysis if available
+    if !run_data.cpu_samples.is_empty() {
+        println!();
+        print_cpu_analysis(&run_data.cpu_samples);
+    }
+
     println!();
     print_outlier_analysis(&run_data.samples, &run_data.statistics);
 
@@ -272,6 +279,18 @@ fn print_historical_table(
                 format_ns(stats.p90),
                 variance_pct
             );
+
+            // Print CPU info if available
+            if !run_data.cpu_samples.is_empty() {
+                let analysis = CpuAnalysis::from_snapshots(&run_data.cpu_samples, None);
+                if let Some(cpu_stats) = analysis.format_stats_line() {
+                    println!("  {}{}", "    ".dimmed(), cpu_stats.dimmed());
+                }
+                // Show warnings if any
+                for warning in &analysis.warnings {
+                    println!("  {}{}", "    ".dimmed(), warning.format());
+                }
+            }
         }
     }
 
@@ -300,4 +319,39 @@ fn format_ns_squared(variance: f64) -> String {
     } else {
         format!("{:.2} ms²", variance / 1_000_000_000_000.0)
     }
+}
+
+/// Print CPU analysis for a set of samples
+fn print_cpu_analysis(cpu_samples: &[simplebench_runtime::CpuSnapshot]) {
+    let analysis = CpuAnalysis::from_snapshots(cpu_samples, None);
+
+    println!("{}", "CPU Analysis".cyan().bold());
+    println!("{}", "─".repeat(50).dimmed());
+
+    if let Some(ref freq_stats) = analysis.frequency_stats {
+        println!("  {}", "Frequency:".yellow());
+        println!("    {}  {:.0} MHz", "Min:".dimmed(), freq_stats.min_mhz);
+        println!("    {}  {:.0} MHz", "Max:".dimmed(), freq_stats.max_mhz);
+        println!("    {}  {:.0} MHz", "Mean:".dimmed(), freq_stats.mean_mhz);
+        println!("    {}  {:.1}%", "Variance:".dimmed(), freq_stats.variance_percent);
+        println!();
+    }
+
+    if let Some(ref temp_stats) = analysis.temperature_stats {
+        println!("  {}", "Temperature:".yellow());
+        println!("    {}  {:.0}°C", "Min:".dimmed(), temp_stats.min_celsius);
+        println!("    {}  {:.0}°C", "Max:".dimmed(), temp_stats.max_celsius);
+        println!("    {}  {:.0}°C", "Mean:".dimmed(), temp_stats.mean_celsius);
+        println!("    {}  +{:.0}°C", "Increase:".dimmed(), temp_stats.increase_celsius);
+        println!();
+    }
+
+    if !analysis.warnings.is_empty() {
+        println!("  {}", "Warnings:".red().bold());
+        for warning in &analysis.warnings {
+            println!("    {}", warning.format());
+        }
+    }
+
+    println!("{}", "─".repeat(50).dimmed());
 }
