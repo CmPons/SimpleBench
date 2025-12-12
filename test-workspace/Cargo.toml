@@ -6,3 +6,16 @@ members = [
     "game-physics",
     "test-runner",
 ]
+
+[profile.bench]
+opt-level = 3
+debug = false
+debug-assertions = false
+overflow-checks = false
+lto = false
+incremental = false
+codegen-units = 16
+
+# Unfortunately, Cargo doesn't automatically set #[cfg(bench)] for the bench profile
+# Users should use custom features or build scripts if they need bench-specific code exclusion
+# For now, #[cfg(bench)] won't work automatically - this is a Cargo limitation

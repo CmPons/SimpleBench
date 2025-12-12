@@ -1,4 +1,4 @@
-use simplebench_macros::mbench;
+use simplebench_macros::bench;
 
 /// Simple AABB (Axis-Aligned Bounding Box)
 #[derive(Clone, Copy)]
@@ -42,7 +42,7 @@ impl AABB {
     }
 }
 
-#[mbench]
+#[bench]
 fn bench_aabb_intersection_checks() {
     let mut boxes = Vec::new();
     for i in 0..200 {
@@ -63,7 +63,7 @@ fn bench_aabb_intersection_checks() {
     std::hint::black_box(collision_count);
 }
 
-#[mbench]
+#[bench]
 fn bench_point_containment_tests() {
     let aabb = AABB::new(-10.0, -10.0, -10.0, 10.0, 10.0, 10.0);
 

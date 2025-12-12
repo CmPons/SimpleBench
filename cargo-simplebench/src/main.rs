@@ -206,8 +206,8 @@ fn main() -> Result<()> {
     println!();
 
     // Step 2: Build workspace and select rlibs
-    println!("{}", "Compiling workspace (release profile)".green().bold());
-    let profile = "release";
+    println!("{}", "Compiling workspace (bench profile)".green().bold());
+    let profile = "bench";
     let rlibs =
         rlib_selection::select_rlibs(&workspace_root, profile).context("Failed to select rlibs")?;
 
@@ -246,7 +246,16 @@ fn main() -> Result<()> {
     // Step 4: Compile runner
     println!("{}", "Compiling runner".green().bold());
     let runner_binary = workspace_info.target_directory.join("simplebench_runner");
-    let deps_dir = workspace_info.target_directory.join(profile).join("deps");
+
+    // Derive deps_dir from the actual rlib paths (bench profile uses release directory)
+    let deps_dir = if let Some(first_rlib) = rlibs.values().next() {
+        first_rlib
+            .parent()
+            .context("Failed to get parent directory of rlib")?
+            .to_path_buf()
+    } else {
+        anyhow::bail!("No rlibs found");
+    };
 
     compile::compile_runner(&runner_path, &runner_binary, &rlibs, &deps_dir)
         .context("Failed to compile runner")?;

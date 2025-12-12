@@ -1,4 +1,4 @@
-use simplebench_macros::mbench;
+use simplebench_macros::bench;
 
 /// Mock game entity
 #[derive(Clone)]
@@ -30,7 +30,7 @@ impl Entity {
     }
 }
 
-#[mbench]
+#[bench]
 fn bench_entity_creation() {
     let mut entities = Vec::new();
     for i in 0..2000 {
@@ -38,7 +38,7 @@ fn bench_entity_creation() {
     }
 }
 
-#[mbench]
+#[bench]
 fn bench_entity_update_loop() {
     let mut entities = Vec::new();
     for i in 0..1000 {
@@ -53,7 +53,7 @@ fn bench_entity_update_loop() {
     }
 }
 
-#[mbench]
+#[bench]
 fn bench_entity_filtering() {
     let mut entities = Vec::new();
     for i in 0..3000 {

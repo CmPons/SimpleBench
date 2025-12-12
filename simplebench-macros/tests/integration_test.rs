@@ -1,22 +1,22 @@
-use simplebench_macros::mbench;
+use simplebench_macros::bench;
 use simplebench_runtime::{run_all_benchmarks, BenchResult};
 
-#[mbench]
+#[bench]
 fn bench_addition() {
     let _ = 1 + 1;
 }
 
-#[mbench]
+#[bench]
 fn bench_multiplication() {
     let _ = 2 * 3;
 }
 
-#[mbench]
+#[bench]
 fn bench_vector_allocation() {
     let _v: Vec<i32> = Vec::with_capacity(100);
 }
 
-#[mbench]
+#[bench]
 fn bench_string_concatenation() {
     let mut s = String::new();
     for i in 0..10 {

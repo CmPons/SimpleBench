@@ -5,7 +5,7 @@ use syn::punctuated::Punctuated;
 use syn::Token;
 
 #[proc_macro_attribute]
-pub fn mbench(args: TokenStream, input: TokenStream) -> TokenStream {
+pub fn bench(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args with Punctuated::<Meta, Token![,]>::parse_terminated);
     let input_fn = parse_macro_input!(input as ItemFn);
 

@@ -1,4 +1,10 @@
-use simplebench_macros::mbench;
+use simplebench_macros::bench;
+
+#[cfg(bench)]
+pub fn bench_only_helper() -> Vec<Vec3> {
+    // This function only exists when built with SimpleBench
+    vec![Vec3::new(1.0, 2.0, 3.0); 100]
+}
 
 /// Simple 3D vector for testing
 #[derive(Clone, Copy, Debug)]
@@ -39,7 +45,7 @@ impl Vec3 {
     }
 }
 
-#[mbench]
+#[bench]
 fn bench_vec3_normalize() {
     let mut vectors = Vec::new();
     for i in 0..1000 {
@@ -51,7 +57,7 @@ fn bench_vec3_normalize() {
     }
 }
 
-#[mbench]
+#[bench]
 fn bench_vec3_cross_product() {
     let v1 = Vec3::new(1.0, 2.0, 3.0);
     let v2 = Vec3::new(4.0, 5.0, 6.0);
@@ -61,7 +67,7 @@ fn bench_vec3_cross_product() {
     }
 }
 
-#[mbench]
+#[bench]
 fn bench_matrix_transform_batch() {
     // Simulate transforming 500 vectors by a simple rotation
     let mut vectors = Vec::new();

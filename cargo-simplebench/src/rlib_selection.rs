@@ -56,8 +56,10 @@ fn select_rlibs_json(workspace_root: &Path, profile: &str) -> Result<HashMap<Str
         .arg("--message-format=json")
         .current_dir(workspace_root);
 
-    if profile == "release" {
-        cmd.arg("--release");
+    if profile == "bench" {
+        cmd.arg("--profile").arg("bench");
+        // Set custom cfg flag so users can use #[cfg(bench)]
+        cmd.env("RUSTFLAGS", "--cfg bench");
     }
 
     let output = cmd
