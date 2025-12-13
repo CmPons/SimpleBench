@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/CmPons/SimpleBench/compare/v1.0.2...v1.0.3) (2025-12-13)
+
+
+### Bug Fixes
+
+* remove accidentally committed target directory and Cargo.lock ([bd27307](https://github.com/CmPons/SimpleBench/commit/bd273070451d2ed278106616e88fe90190dff8ff))
+
 ## [1.0.2](https://github.com/CmPons/SimpleBench/compare/v1.0.1...v1.0.2) (2025-12-13)
 
 
