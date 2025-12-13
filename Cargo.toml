@@ -12,7 +12,7 @@ version = "1.0.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/CmPons/simplebench"
-authors = ["CmPons", "Claude <noreply@anthropic.com>"]
+authors = ["CmPons <SimpleBench0@gmail.com", "Claude <noreply@anthropic.com>"]
 rust-version = "1.70"
 
 [workspace.dependencies]
