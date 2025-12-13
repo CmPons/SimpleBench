@@ -1,3 +1,10 @@
+## [1.0.4](https://github.com/CmPons/SimpleBench/compare/v1.0.3...v1.0.4) (2025-12-13)
+
+
+### Bug Fixes
+
+* add readme field to all crates for crates.io display ([d1c1417](https://github.com/CmPons/SimpleBench/commit/d1c1417799f4b2e814352b80eeda8f80a75226a8))
+
 ## [1.0.3](https://github.com/CmPons/SimpleBench/compare/v1.0.2...v1.0.3) (2025-12-13)
 
 
