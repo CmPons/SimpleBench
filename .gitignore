@@ -3,3 +3,4 @@ target/**
 .benches/
 **/.benches/
 .claude/
+CLAUDE.md
