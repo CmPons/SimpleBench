@@ -232,7 +232,9 @@ fn main() -> Result<()> {
     // Step 2: Build workspace crates with dev-deps and cfg(test)
     println!(
         "{}",
-        "Compiling benchmark crates (release + dev-deps)".green().bold()
+        "Compiling benchmark crates (release + dev-deps)"
+            .green()
+            .bold()
     );
 
     // Use isolated target directory to avoid cache conflicts

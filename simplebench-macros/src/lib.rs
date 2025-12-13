@@ -1,8 +1,8 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, ItemFn, Meta, Expr, ExprLit, Lit};
 use syn::punctuated::Punctuated;
 use syn::Token;
+use syn::{parse_macro_input, Expr, ExprLit, ItemFn, Lit, Meta};
 
 #[proc_macro_attribute]
 pub fn bench(args: TokenStream, input: TokenStream) -> TokenStream {
@@ -24,12 +24,20 @@ pub fn bench(args: TokenStream, input: TokenStream) -> TokenStream {
 
             match ident.as_deref() {
                 Some("iterations") => {
-                    if let Expr::Lit(ExprLit { lit: Lit::Int(lit_int), .. }) = &nv.value {
+                    if let Expr::Lit(ExprLit {
+                        lit: Lit::Int(lit_int),
+                        ..
+                    }) = &nv.value
+                    {
                         _iterations = lit_int.base10_parse().unwrap();
                     }
                 }
                 Some("samples") => {
-                    if let Expr::Lit(ExprLit { lit: Lit::Int(lit_int), .. }) = &nv.value {
+                    if let Expr::Lit(ExprLit {
+                        lit: Lit::Int(lit_int),
+                        ..
+                    }) = &nv.value
+                    {
                         _samples = lit_int.base10_parse().unwrap();
                     }
                 }
@@ -44,7 +52,7 @@ pub fn bench(args: TokenStream, input: TokenStream) -> TokenStream {
     // Generate wrapper function name
     let wrapper_fn_name = syn::Ident::new(
         &format!("__simplebench_wrapper_{}", fn_name),
-        fn_name.span()
+        fn_name.span(),
     );
 
     let expanded = quote! {

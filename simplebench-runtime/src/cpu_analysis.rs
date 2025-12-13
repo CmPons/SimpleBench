@@ -41,8 +41,13 @@ pub enum CpuWarning {
 impl CpuWarning {
     pub fn format(&self) -> String {
         match self {
-            CpuWarning::ColdStart { initial_temp_celsius } => {
-                format!("⚠ Cold start detected (initial: {:.0}°C)", initial_temp_celsius)
+            CpuWarning::ColdStart {
+                initial_temp_celsius,
+            } => {
+                format!(
+                    "⚠ Cold start detected (initial: {:.0}°C)",
+                    initial_temp_celsius
+                )
             }
             CpuWarning::ThermalThrottling {
                 temp_increase_celsius,
@@ -54,7 +59,10 @@ impl CpuWarning {
                 )
             }
             CpuWarning::FrequencyVariance { variance_percent } => {
-                format!("⚠ Frequency variance detected ({:.1}% variance)", variance_percent)
+                format!(
+                    "⚠ Frequency variance detected ({:.1}% variance)",
+                    variance_percent
+                )
             }
             CpuWarning::LowFrequency {
                 mean_mhz,
@@ -83,10 +91,7 @@ impl CpuAnalysis {
         let mut warnings = Vec::new();
 
         // Collect frequency data
-        let frequencies: Vec<f64> = snapshots
-            .iter()
-            .filter_map(|s| s.frequency_mhz())
-            .collect();
+        let frequencies: Vec<f64> = snapshots.iter().filter_map(|s| s.frequency_mhz()).collect();
 
         // Collect temperature data
         let temperatures: Vec<f64> = snapshots
@@ -97,7 +102,10 @@ impl CpuAnalysis {
         // Calculate frequency statistics
         let frequency_stats = if !frequencies.is_empty() {
             let min_mhz = frequencies.iter().copied().fold(f64::INFINITY, f64::min);
-            let max_mhz = frequencies.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let max_mhz = frequencies
+                .iter()
+                .copied()
+                .fold(f64::NEG_INFINITY, f64::max);
             let mean_mhz = frequencies.iter().sum::<f64>() / frequencies.len() as f64;
 
             // Calculate standard deviation
@@ -151,7 +159,10 @@ impl CpuAnalysis {
         // Calculate temperature statistics
         let temperature_stats = if !temperatures.is_empty() {
             let min_celsius = temperatures.iter().copied().fold(f64::INFINITY, f64::min);
-            let max_celsius = temperatures.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+            let max_celsius = temperatures
+                .iter()
+                .copied()
+                .fold(f64::NEG_INFINITY, f64::max);
             let mean_celsius = temperatures.iter().sum::<f64>() / temperatures.len() as f64;
             let increase_celsius = max_celsius - min_celsius;
 
@@ -267,10 +278,7 @@ mod tests {
         let analysis = CpuAnalysis::from_snapshots(&snapshots, None);
 
         assert!(!analysis.warnings.is_empty());
-        assert!(matches!(
-            analysis.warnings[0],
-            CpuWarning::ColdStart { .. }
-        ));
+        assert!(matches!(analysis.warnings[0], CpuWarning::ColdStart { .. }));
     }
 
     #[test]
@@ -291,7 +299,10 @@ mod tests {
         let analysis = CpuAnalysis::from_snapshots(&snapshots, None);
 
         assert!(!analysis.warnings.is_empty());
-        let has_variance_warning = analysis.warnings.iter().any(|w| matches!(w, CpuWarning::FrequencyVariance { .. }));
+        let has_variance_warning = analysis
+            .warnings
+            .iter()
+            .any(|w| matches!(w, CpuWarning::FrequencyVariance { .. }));
         assert!(has_variance_warning);
     }
 
@@ -313,7 +324,10 @@ mod tests {
         let analysis = CpuAnalysis::from_snapshots(&snapshots, None);
 
         assert!(!analysis.warnings.is_empty());
-        let has_throttling_warning = analysis.warnings.iter().any(|w| matches!(w, CpuWarning::ThermalThrottling { .. }));
+        let has_throttling_warning = analysis
+            .warnings
+            .iter()
+            .any(|w| matches!(w, CpuWarning::ThermalThrottling { .. }));
         assert!(has_throttling_warning);
     }
 }

@@ -1,7 +1,14 @@
 [package]
 name = "simplebench-runtime"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Core runtime library for SimpleBench - a minimalist microbenchmarking framework"
+keywords = ["benchmark", "performance", "testing", "profiling"]
+categories = ["development-tools::profiling", "development-tools::testing"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }

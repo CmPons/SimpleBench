@@ -157,7 +157,11 @@ pub fn verify_benchmark_environment(cpu_core: usize) {
 
     #[cfg(target_os = "linux")]
     {
-        println!("  {} {}", "Platform:".dimmed(), "Linux (full monitoring support)".cyan());
+        println!(
+            "  {} {}",
+            "Platform:".dimmed(),
+            "Linux (full monitoring support)".cyan()
+        );
 
         let monitor = CpuMonitor::new(cpu_core);
 
@@ -168,8 +172,16 @@ pub fn verify_benchmark_environment(cpu_core: usize) {
                 println!(" {}", governor.green());
             } else {
                 println!(" {}", governor.yellow());
-                println!("    {} {}", "⚠".yellow(), "Not using 'performance' governor".yellow());
-                println!("    {} {}", "Consider:".dimmed(), "sudo cpupower frequency-set -g performance".dimmed());
+                println!(
+                    "    {} {}",
+                    "⚠".yellow(),
+                    "Not using 'performance' governor".yellow()
+                );
+                println!(
+                    "    {} {}",
+                    "Consider:".dimmed(),
+                    "sudo cpupower frequency-set -g performance".dimmed()
+                );
             }
         }
 
@@ -202,12 +214,22 @@ pub fn verify_benchmark_environment(cpu_core: usize) {
         // Check thermal zones
         let zones = CpuMonitor::discover_thermal_zones();
         if !zones.is_empty() {
-            println!("  {} {} {}", "Found".dimmed(), zones.len().to_string().cyan(), "thermal zone(s)".dimmed());
+            println!(
+                "  {} {} {}",
+                "Found".dimmed(),
+                zones.len().to_string().cyan(),
+                "thermal zone(s)".dimmed()
+            );
             for zone in zones.iter().take(3) {
                 let path = format!("/sys/class/thermal/thermal_zone{}/temp", zone);
                 if let Ok(temp_str) = fs::read_to_string(path) {
                     if let Ok(temp_millic) = temp_str.trim().parse::<i32>() {
-                        println!("    {} {} {}°C", "Zone".dimmed(), zone, (temp_millic / 1000).to_string().cyan());
+                        println!(
+                            "    {} {} {}°C",
+                            "Zone".dimmed(),
+                            zone,
+                            (temp_millic / 1000).to_string().cyan()
+                        );
                     }
                 }
             }
@@ -217,8 +239,17 @@ pub fn verify_benchmark_environment(cpu_core: usize) {
     #[cfg(not(target_os = "linux"))]
     {
         let os = std::env::consts::OS;
-        println!("  {} {} {}", "Platform:".dimmed(), os.cyan(), "(limited monitoring support)".dimmed());
-        println!("    {} {}", "ℹ".blue(), "CPU frequency/thermal monitoring not available on this platform".dimmed());
+        println!(
+            "  {} {} {}",
+            "Platform:".dimmed(),
+            os.cyan(),
+            "(limited monitoring support)".dimmed()
+        );
+        println!(
+            "    {} {}",
+            "ℹ".blue(),
+            "CPU frequency/thermal monitoring not available on this platform".dimmed()
+        );
     }
 
     println!("{}\n", "Environment check complete.".green());

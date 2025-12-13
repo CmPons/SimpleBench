@@ -1,7 +1,7 @@
-/// Bayesian Online Change Point Detection
-///
-/// Based on Adams & MacKay (2007) "Bayesian Online Changepoint Detection"
-/// Simplified implementation for detecting performance regressions in benchmark data.
+//! Bayesian Online Change Point Detection
+//!
+//! Based on Adams & MacKay (2007) "Bayesian Online Changepoint Detection"
+//! Simplified implementation for detecting performance regressions in benchmark data.
 
 use crate::statistics::mean;
 
@@ -17,9 +17,7 @@ impl BayesianCPD {
     /// # Arguments
     /// * `hazard_rate` - Prior probability of change point (e.g., 0.1 = expect change every 10 runs)
     pub fn new(hazard_rate: f64) -> Self {
-        Self {
-            hazard_rate,
-        }
+        Self { hazard_rate }
     }
 
     /// Update with a new observation and return change point probability
@@ -56,7 +54,8 @@ impl BayesianCPD {
         let evidence_weight = unlikelihood;
 
         // Combine: higher hazard rate gives more weight to the prior expectation of change
-        let change_prob = (evidence_weight * 0.7) + (prior_weight * 0.3) + (evidence_weight * prior_weight * 0.5);
+        let change_prob =
+            (evidence_weight * 0.7) + (prior_weight * 0.3) + (evidence_weight * prior_weight * 0.5);
 
         change_prob.min(1.0)
     }
@@ -95,8 +94,7 @@ impl BayesianCPD {
         let t_squared = t * t;
 
         // Simplified Student's t PDF (good enough for our purposes)
-        let coef = (1.0 + t_squared / df).powf(-(df + 1.0) / 2.0);
-        coef
+        (1.0 + t_squared / df).powf(-(df + 1.0) / 2.0)
     }
 }
 
@@ -166,12 +164,16 @@ mod tests {
 
         let historical_stable = vec![1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0];
         let new_value_jump = 1.35;
-        let prob_sudden = bayesian_change_point_probability(new_value_jump, &historical_stable, 0.1);
+        let prob_sudden =
+            bayesian_change_point_probability(new_value_jump, &historical_stable, 0.1);
 
         // Sudden jump should have higher change probability than gradual drift
-        assert!(prob_sudden > prob_gradual,
+        assert!(
+            prob_sudden > prob_gradual,
             "Sudden jump ({}) should have higher change probability than gradual drift ({})",
-            prob_sudden, prob_gradual);
+            prob_sudden,
+            prob_gradual
+        );
     }
 
     #[test]

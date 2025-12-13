@@ -1,3 +1,27 @@
+//! SimpleBench Runtime - Core library for the SimpleBench microbenchmarking framework.
+//!
+//! This crate provides the runtime components for SimpleBench:
+//! - Benchmark registration via the [`SimpleBench`] struct and `inventory` crate
+//! - Timing and measurement with warmup phases
+//! - Statistical analysis of benchmark results
+//! - Baseline storage and regression detection
+//!
+//! # Usage
+//!
+//! This crate is typically used alongside `simplebench-macros` which provides the
+//! `#[bench]` attribute for easy benchmark registration:
+//!
+//! ```rust,ignore
+//! use simplebench_macros::bench;
+//!
+//! #[bench]
+//! fn my_benchmark() {
+//!     // code to benchmark
+//! }
+//! ```
+//!
+//! The `cargo simplebench` CLI tool handles compilation and execution of benchmarks.
+
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -22,71 +46,122 @@ pub use statistics::*;
 // Re-export inventory for use by the macro
 pub use inventory;
 
+/// Percentile statistics for a benchmark run.
+///
+/// Contains the 50th, 90th, and 99th percentile timings along with the mean.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Percentiles {
+    /// 50th percentile (median) timing
     pub p50: Duration,
+    /// 90th percentile timing
     pub p90: Duration,
+    /// 99th percentile timing
     pub p99: Duration,
+    /// Arithmetic mean of all timings
     pub mean: Duration,
 }
 
-/// Comprehensive statistics for a benchmark run
+/// Comprehensive statistics for a benchmark run.
+///
+/// All timing values are in nanoseconds for precision.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Statistics {
-    pub mean: u128,    // nanoseconds
-    pub median: u128,  // nanoseconds (p50)
-    pub p90: u128,     // nanoseconds
-    pub p99: u128,     // nanoseconds
-    pub std_dev: f64,  // standard deviation in nanoseconds
-    pub variance: f64, // variance in nanoseconds²
-    pub min: u128,     // nanoseconds
-    pub max: u128,     // nanoseconds
+    /// Arithmetic mean in nanoseconds
+    pub mean: u128,
+    /// Median (50th percentile) in nanoseconds
+    pub median: u128,
+    /// 90th percentile in nanoseconds
+    pub p90: u128,
+    /// 99th percentile in nanoseconds
+    pub p99: u128,
+    /// Standard deviation in nanoseconds
+    pub std_dev: f64,
+    /// Variance in nanoseconds squared
+    pub variance: f64,
+    /// Minimum timing in nanoseconds
+    pub min: u128,
+    /// Maximum timing in nanoseconds
+    pub max: u128,
+    /// Number of samples collected
     pub sample_count: usize,
 }
 
+/// Complete result of a benchmark run.
+///
+/// Contains all timing data, statistics, and metadata for a single benchmark execution.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct BenchResult {
+    /// Benchmark function name
     pub name: String,
+    /// Module path where the benchmark is defined
     pub module: String,
+    /// Number of iterations per sample
     pub iterations: usize,
+    /// Number of samples collected
     pub samples: usize,
+    /// Percentile statistics computed from all timings
     pub percentiles: Percentiles,
+    /// Raw timing data for each sample
     pub all_timings: Vec<Duration>,
+    /// CPU state samples collected during the run
     #[serde(default)]
     pub cpu_samples: Vec<CpuSnapshot>,
+    /// Total warmup duration in milliseconds
     #[serde(default)]
     pub warmup_ms: Option<u128>,
+    /// Number of iterations performed during warmup
     #[serde(default)]
     pub warmup_iterations: Option<u64>,
 }
 
+/// Comparison between current benchmark run and baseline.
+///
+/// Contains statistical measures to determine if performance has regressed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Comparison {
+    /// Mean timing from the current run
     pub current_mean: Duration,
+    /// Mean timing from the baseline
     pub baseline_mean: Duration,
+    /// Percentage change from baseline (positive = slower)
     pub percentage_change: f64,
+    /// Number of baseline samples used for comparison
     #[serde(default)]
     pub baseline_count: usize,
+    /// Z-score for statistical significance
     #[serde(skip_serializing_if = "Option::is_none")]
     pub z_score: Option<f64>,
+    /// 95% confidence interval for the change
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence_interval: Option<(f64, f64)>,
+    /// Probability that a real change occurred
     #[serde(skip_serializing_if = "Option::is_none")]
     pub change_probability: Option<f64>,
 }
 
+/// A registered benchmark function.
+///
+/// This struct is used by the `inventory` crate for compile-time benchmark registration.
+/// The `#[bench]` macro from `simplebench-macros` generates these registrations automatically.
 pub struct SimpleBench {
+    /// Name of the benchmark function
     pub name: &'static str,
+    /// Module path where the benchmark is defined
     pub module: &'static str,
+    /// The benchmark function to execute
     pub func: fn(),
 }
 
 inventory::collect!(SimpleBench);
 
-/// Benchmark info for JSON listing
+/// Benchmark metadata for JSON listing.
+///
+/// A simplified representation of a benchmark for discovery/listing purposes.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BenchmarkInfo {
+    /// Name of the benchmark function
     pub name: String,
+    /// Module path where the benchmark is defined
     pub module: String,
 }
 
@@ -118,7 +193,10 @@ pub fn run_single_benchmark_json(config: &crate::config::BenchmarkConfig) {
 
     // Set CPU affinity
     if let Err(e) = affinity::set_thread_affinity([pin_core]) {
-        eprintln!("Warning: Failed to set affinity to core {}: {:?}", pin_core, e);
+        eprintln!(
+            "Warning: Failed to set affinity to core {}: {:?}",
+            pin_core, e
+        );
     }
 
     // Find and run the benchmark
@@ -140,7 +218,6 @@ pub fn run_single_benchmark_json(config: &crate::config::BenchmarkConfig) {
     eprintln!("ERROR: Benchmark '{}' not found", bench_name);
     std::process::exit(1);
 }
-
 
 pub(crate) fn calculate_percentiles(timings: &[Duration]) -> Percentiles {
     let mut sorted_timings = timings.to_vec();

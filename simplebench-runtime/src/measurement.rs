@@ -47,7 +47,8 @@ where
     F: Fn(),
 {
     // Perform time-based warmup and store stats
-    let (warmup_ms, warmup_iters) = warmup_benchmark(&func, Duration::from_secs(warmup_duration_secs), iterations);
+    let (warmup_ms, warmup_iters) =
+        warmup_benchmark(&func, Duration::from_secs(warmup_duration_secs), iterations);
 
     let mut result = measure_function_impl(name, module, func, iterations, samples);
 
@@ -134,7 +135,9 @@ pub fn validate_measurement_params(iterations: usize, samples: usize) -> Result<
         return Err("Samples must be greater than 0".to_string());
     }
     if samples > 1_000_000 {
-        return Err("Samples should not exceed 1,000,000 for reasonable execution time".to_string());
+        return Err(
+            "Samples should not exceed 1,000,000 for reasonable execution time".to_string(),
+        );
     }
     Ok(())
 }
@@ -188,6 +191,4 @@ mod tests {
             assert!(*timing < Duration::from_secs(1));
         }
     }
-
 }
-

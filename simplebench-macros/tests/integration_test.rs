@@ -61,7 +61,11 @@ fn test_benchmarks_are_registered() {
 fn test_benchmark_module_paths() {
     // Verify that module paths are captured correctly
     for bench in simplebench_runtime::inventory::iter::<SimpleBench>() {
-        assert!(!bench.module.is_empty(), "Module should not be empty for {}", bench.name);
+        assert!(
+            !bench.module.is_empty(),
+            "Module should not be empty for {}",
+            bench.name
+        );
         assert!(!bench.name.is_empty(), "Name should not be empty");
     }
 }

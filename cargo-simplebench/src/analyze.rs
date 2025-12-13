@@ -66,9 +66,17 @@ fn analyze_single_run(
         .load_run(crate_name, bench_name, timestamp)?
         .context(format!("Run '{}' not found", timestamp))?;
 
-    println!("{}", format!("Benchmark: {}::{}", crate_name, bench_name).cyan().bold());
+    println!(
+        "{}",
+        format!("Benchmark: {}::{}", crate_name, bench_name)
+            .cyan()
+            .bold()
+    );
     println!("{}", format!("Run: {}", timestamp).dimmed());
-    println!("{}", format!("Samples: {}", run_data.statistics.sample_count).dimmed());
+    println!(
+        "{}",
+        format!("Samples: {}", run_data.statistics.sample_count).dimmed()
+    );
     println!();
 
     print_statistics(&run_data.statistics);
@@ -95,9 +103,17 @@ fn analyze_latest_with_history(
         .load_baseline(crate_name, bench_name)?
         .context("No baseline found for this benchmark")?;
 
-    println!("{}", format!("Benchmark: {}::{}", crate_name, bench_name).cyan().bold());
+    println!(
+        "{}",
+        format!("Benchmark: {}::{}", crate_name, bench_name)
+            .cyan()
+            .bold()
+    );
     println!("{}", format!("Latest Run: {}", latest.timestamp).dimmed());
-    println!("{}", format!("Samples: {}", latest.statistics.sample_count).dimmed());
+    println!(
+        "{}",
+        format!("Samples: {}", latest.statistics.sample_count).dimmed()
+    );
     println!();
 
     print_statistics(&latest.statistics);
@@ -109,8 +125,18 @@ fn analyze_latest_with_history(
     let runs = baseline_manager.list_runs(crate_name, bench_name)?;
     if runs.len() > 1 {
         let n = runs.len().min(5);
-        println!("{}", format!("Historical Comparison (last {} runs):", n).green().bold());
-        print_historical_table(baseline_manager, crate_name, bench_name, &runs[runs.len().saturating_sub(n)..])?;
+        println!(
+            "{}",
+            format!("Historical Comparison (last {} runs):", n)
+                .green()
+                .bold()
+        );
+        print_historical_table(
+            baseline_manager,
+            crate_name,
+            bench_name,
+            &runs[runs.len().saturating_sub(n)..],
+        )?;
     }
 
     Ok(())
@@ -131,8 +157,16 @@ fn analyze_multiple_runs(
 
     let runs_to_analyze = &runs[runs.len().saturating_sub(n)..];
 
-    println!("{}", format!("Benchmark: {}::{}", crate_name, bench_name).cyan().bold());
-    println!("{}", format!("Comparing last {} runs:", runs_to_analyze.len()).dimmed());
+    println!(
+        "{}",
+        format!("Benchmark: {}::{}", crate_name, bench_name)
+            .cyan()
+            .bold()
+    );
+    println!(
+        "{}",
+        format!("Comparing last {} runs:", runs_to_analyze.len()).dimmed()
+    );
     println!();
 
     print_historical_table(baseline_manager, crate_name, bench_name, runs_to_analyze)?;
@@ -156,9 +190,23 @@ fn print_statistics(stats: &Statistics) {
     println!("  {}  {}", "p90:".cyan(), format_ns(stats.p90));
     println!("  {}  {}", "p99:".cyan(), format_ns(stats.p99));
     println!();
-    println!("  {}  {} ({:.1}%)", "Std Dev:".cyan(), format_ns(stats.std_dev as u128), variance_pct);
-    println!("  {}  {}", "Variance:".cyan(), format_ns_squared(stats.variance));
-    println!("  {}  {} - {}", "Range:".cyan(), format_ns(stats.min), format_ns(stats.max));
+    println!(
+        "  {}  {} ({:.1}%)",
+        "Std Dev:".cyan(),
+        format_ns(stats.std_dev as u128),
+        variance_pct
+    );
+    println!(
+        "  {}  {}",
+        "Variance:".cyan(),
+        format_ns_squared(stats.variance)
+    );
+    println!(
+        "  {}  {} - {}",
+        "Range:".cyan(),
+        format_ns(stats.min),
+        format_ns(stats.max)
+    );
     println!("{}", "─".repeat(50).dimmed());
 }
 
@@ -188,9 +236,18 @@ fn print_outlier_analysis(samples: &[u128], stats: &Statistics) {
         .collect();
 
     println!("  {}", "IQR Method (1.5× threshold):".yellow());
-    println!("    {}  {}", "Lower fence:".dimmed(), format_ns(lower_fence));
-    println!("    {}  {}", "Upper fence:".dimmed(), format_ns(upper_fence));
-    println!("    {}  {} ({:.1}%)",
+    println!(
+        "    {}  {}",
+        "Lower fence:".dimmed(),
+        format_ns(lower_fence)
+    );
+    println!(
+        "    {}  {}",
+        "Upper fence:".dimmed(),
+        format_ns(upper_fence)
+    );
+    println!(
+        "    {}  {} ({:.1}%)",
         "Outliers:".dimmed(),
         iqr_outliers.len(),
         (iqr_outliers.len() as f64 / samples.len() as f64) * 100.0
@@ -215,7 +272,8 @@ fn print_outlier_analysis(samples: &[u128], stats: &Statistics) {
         .collect();
 
     println!("  {}", "Z-Score Method (3σ threshold):".yellow());
-    println!("    {}  {} ({:.1}%)",
+    println!(
+        "    {}  {} ({:.1}%)",
         "Outliers:".dimmed(),
         z_outliers.len(),
         (z_outliers.len() as f64 / samples.len() as f64) * 100.0
@@ -231,11 +289,7 @@ fn print_outlier_analysis(samples: &[u128], stats: &Statistics) {
             } else {
                 0.0
             };
-            println!("    #{}: {} ({:+.1}%)",
-                idx,
-                format_ns(*sample),
-                diff_pct
-            );
+            println!("    #{}: {} ({:+.1}%)", idx, format_ns(*sample), diff_pct);
         }
         if iqr_outliers.len() > 5 {
             println!("    {} more outliers...", iqr_outliers.len() - 5);
@@ -333,7 +387,11 @@ fn print_cpu_analysis(cpu_samples: &[simplebench_runtime::CpuSnapshot]) {
         println!("    {}  {:.0} MHz", "Min:".dimmed(), freq_stats.min_mhz);
         println!("    {}  {:.0} MHz", "Max:".dimmed(), freq_stats.max_mhz);
         println!("    {}  {:.0} MHz", "Mean:".dimmed(), freq_stats.mean_mhz);
-        println!("    {}  {:.1}%", "Variance:".dimmed(), freq_stats.variance_percent);
+        println!(
+            "    {}  {:.1}%",
+            "Variance:".dimmed(),
+            freq_stats.variance_percent
+        );
         println!();
     }
 
@@ -342,7 +400,11 @@ fn print_cpu_analysis(cpu_samples: &[simplebench_runtime::CpuSnapshot]) {
         println!("    {}  {:.0}°C", "Min:".dimmed(), temp_stats.min_celsius);
         println!("    {}  {:.0}°C", "Max:".dimmed(), temp_stats.max_celsius);
         println!("    {}  {:.0}°C", "Mean:".dimmed(), temp_stats.mean_celsius);
-        println!("    {}  +{:.0}°C", "Increase:".dimmed(), temp_stats.increase_celsius);
+        println!(
+            "    {}  +{:.0}°C",
+            "Increase:".dimmed(),
+            temp_stats.increase_celsius
+        );
         println!();
     }
 

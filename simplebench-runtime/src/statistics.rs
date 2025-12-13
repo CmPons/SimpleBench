@@ -1,7 +1,7 @@
-/// Statistical functions for baseline comparison and regression detection
-///
-/// This module provides core statistical operations used by both the statistical
-/// window approach and Bayesian change point detection.
+//! Statistical functions for baseline comparison and regression detection
+//!
+//! This module provides core statistical operations used by both the statistical
+//! window approach and Bayesian change point detection.
 
 /// Calculate the arithmetic mean of a slice of values
 pub fn mean(values: &[f64]) -> f64 {
@@ -42,18 +42,14 @@ pub fn z_score(value: f64, mean: f64, stddev: f64) -> f64 {
 /// - 0.90 = 90% confidence (z = 1.645 one-tailed, 1.96 two-tailed)
 /// - 0.95 = 95% confidence (z = 1.645 one-tailed, 1.96 two-tailed)
 /// - 0.99 = 99% confidence (z = 2.326 one-tailed, 2.576 two-tailed)
-pub fn confidence_interval(
-    mean: f64,
-    stddev: f64,
-    confidence_level: f64,
-) -> (f64, f64) {
+pub fn confidence_interval(mean: f64, stddev: f64, confidence_level: f64) -> (f64, f64) {
     // Map confidence level to z-critical value (one-tailed for regression detection)
     let z_critical = if (confidence_level - 0.90).abs() < 0.01 {
-        1.282  // 90% one-tailed
+        1.282 // 90% one-tailed
     } else if (confidence_level - 0.95).abs() < 0.01 {
-        1.645  // 95% one-tailed
+        1.645 // 95% one-tailed
     } else if (confidence_level - 0.99).abs() < 0.01 {
-        2.326  // 99% one-tailed
+        2.326 // 99% one-tailed
     } else {
         // Default to 95% two-tailed for other values
         1.96

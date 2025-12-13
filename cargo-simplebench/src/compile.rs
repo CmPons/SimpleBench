@@ -25,7 +25,8 @@ pub fn compile_runner(
     cmd.arg("-C").arg("opt-level=0");
 
     // Add dependency search path
-    cmd.arg("-L").arg(format!("dependency={}", deps_dir.display()));
+    cmd.arg("-L")
+        .arg(format!("dependency={}", deps_dir.display()));
 
     // Add --extern flags for each rlib
     for (crate_name, rlib_path) in rlibs {
@@ -33,9 +34,7 @@ pub fn compile_runner(
             .arg(format!("{}={}", crate_name, rlib_path.display()));
     }
 
-    let output = cmd
-        .output()
-        .context("Failed to execute rustc")?;
+    let output = cmd.output().context("Failed to execute rustc")?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);

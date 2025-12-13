@@ -1,15 +1,17 @@
 {
-  description = "Dev Shell for working on The Forge";
+  description = "SimpleBench - A minimalist microbenchmarking framework for Rust";
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
     semantic-release-cargo.url = "github:CmPons/nix-semantic-release-cargo";
+    crane.url = "github:ipetkov/crane";
   };
   outputs =
     {
       nixpkgs,
       flake-utils,
       semantic-release-cargo,
+      crane,
       ...
     }:
     flake-utils.lib.eachDefaultSystem (
@@ -20,8 +22,30 @@
           config.allowUnfree = true;
         };
         crm = semantic-release-cargo.packages.${system}.default;
+
+        craneLib = crane.mkLib pkgs;
+
+        # Common arguments for crane builds
+        commonArgs = {
+          src = craneLib.cleanCargoSource ./.;
+          strictDeps = true;
+        };
+
+        # Build dependencies first (for caching)
+        cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+
+        # Build the cargo-simplebench binary
+        cargo-simplebench = craneLib.buildPackage (commonArgs // {
+          inherit cargoArtifacts;
+          cargoExtraArgs = "-p cargo-simplebench";
+        });
       in
       {
+        packages = {
+          inherit cargo-simplebench;
+          default = cargo-simplebench;
+        };
+
         devShell = pkgs.mkShell {
 
           packages = with pkgs; [

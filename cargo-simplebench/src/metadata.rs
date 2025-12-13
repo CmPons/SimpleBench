@@ -53,7 +53,10 @@ fn depends_on_simplebench_runtime(package: &Package) -> bool {
     package.dependencies.iter().any(|dep| {
         let name_matches = dep.name == "simplebench-runtime" || dep.name == "simplebench_runtime";
         // Accept both regular dependencies and dev-dependencies
-        let kind_ok = matches!(dep.kind, DependencyKind::Normal | DependencyKind::Development);
+        let kind_ok = matches!(
+            dep.kind,
+            DependencyKind::Normal | DependencyKind::Development
+        );
         name_matches && kind_ok
     })
 }
@@ -61,8 +64,9 @@ fn depends_on_simplebench_runtime(package: &Package) -> bool {
 /// Check if a package has a library target (rlib/lib)
 fn has_lib_target(package: &Package) -> bool {
     package.targets.iter().any(|target| {
-        target.kind.iter().any(|kind| {
-            kind == "lib" || kind == "rlib"
-        })
+        target
+            .kind
+            .iter()
+            .any(|kind| kind == "lib" || kind == "rlib")
     })
 }

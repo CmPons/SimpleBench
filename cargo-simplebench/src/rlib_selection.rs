@@ -75,10 +75,9 @@ pub fn build_and_select_rlibs(
             .arg(&out_dir)
             .current_dir(workspace_root);
 
-        let rustc_output = cmd.output().context(format!(
-            "Failed to execute rustc for {}",
-            crate_name
-        ))?;
+        let rustc_output = cmd
+            .output()
+            .context(format!("Failed to execute rustc for {}", crate_name))?;
 
         if !rustc_output.status.success() {
             let stderr = String::from_utf8_lossy(&rustc_output.stderr);
@@ -127,10 +126,7 @@ impl CargoProfile {
 }
 
 /// Parse cargo --message-format=json output to collect rlib/so paths
-fn parse_cargo_json(
-    stdout: &[u8],
-    exclude_crate: &str,
-) -> Result<HashMap<String, PathBuf>> {
+fn parse_cargo_json(stdout: &[u8], exclude_crate: &str) -> Result<HashMap<String, PathBuf>> {
     let mut rlibs: HashMap<String, PathBuf> = HashMap::new();
     let exclude_normalized = exclude_crate.replace('-', "_");
 
@@ -231,8 +227,8 @@ fn get_crate_src_path(workspace_root: &Path, crate_name: &str) -> Result<PathBuf
         src_path: PathBuf,
     }
 
-    let metadata: Metadata = serde_json::from_slice(&output.stdout)
-        .context("Failed to parse cargo metadata")?;
+    let metadata: Metadata =
+        serde_json::from_slice(&output.stdout).context("Failed to parse cargo metadata")?;
 
     for package in &metadata.packages {
         if package.name == crate_name {
@@ -259,8 +255,8 @@ fn find_crate_rlib(deps_dir: &Path, crate_name: &str) -> Result<PathBuf> {
     // Fall back to looking for hash-suffixed rlibs
     let prefix = format!("lib{}-", crate_name);
 
-    for entry in fs::read_dir(deps_dir)
-        .context(format!("Failed to read deps directory: {:?}", deps_dir))?
+    for entry in
+        fs::read_dir(deps_dir).context(format!("Failed to read deps directory: {:?}", deps_dir))?
     {
         let entry = entry?;
         let path = entry.path();

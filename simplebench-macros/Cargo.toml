@@ -1,7 +1,14 @@
 [package]
 name = "simplebench-macros"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Procedural macros for SimpleBench - provides the #[bench] attribute"
+keywords = ["benchmark", "macro", "proc-macro", "testing"]
+categories = ["development-tools::procedural-macro-helpers"]
 
 [lib]
 proc-macro = true
@@ -10,8 +17,8 @@ proc-macro = true
 syn = { version = "2.0", features = ["full"] }
 quote = "1.0"
 proc-macro2 = "1.0"
-simplebench-runtime = { path = "../simplebench-runtime" }
+simplebench-runtime = { version = "0.1.0", path = "../simplebench-runtime" }
 
 [dev-dependencies]
-simplebench-runtime = { path = "../simplebench-runtime" }
+simplebench-runtime = { version = "0.1.0", path = "../simplebench-runtime" }
 tempfile = "3.0"

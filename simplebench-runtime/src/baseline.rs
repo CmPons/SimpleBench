@@ -77,7 +77,11 @@ fn is_false(b: &bool) -> bool {
 }
 
 impl BaselineData {
-    pub fn from_bench_result(result: &BenchResult, machine_id: String, was_regression: bool) -> Self {
+    pub fn from_bench_result(
+        result: &BenchResult,
+        machine_id: String,
+        was_regression: bool,
+    ) -> Self {
         // Convert Duration timings to u128 nanoseconds
         let samples: Vec<u128> = result.all_timings.iter().map(|d| d.as_nanos()).collect();
 
@@ -206,7 +210,8 @@ impl BaselineManager {
     ) -> Result<(), std::io::Error> {
         self.ensure_dir_exists(crate_name, &result.name)?;
 
-        let baseline = BaselineData::from_bench_result(result, self.machine_id.clone(), was_regression);
+        let baseline =
+            BaselineData::from_bench_result(result, self.machine_id.clone(), was_regression);
         let json = serde_json::to_string_pretty(&baseline)?;
 
         let path = self.get_run_path(crate_name, &result.name);
@@ -228,7 +233,7 @@ impl BaselineManager {
             // Find most recent JSON file
             let mut runs: Vec<_> = fs::read_dir(&bench_dir)?
                 .filter_map(|e| e.ok())
-                .filter(|e| e.path().extension().map_or(false, |ext| ext == "json"))
+                .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
                 .collect();
 
             if runs.is_empty() {
@@ -279,7 +284,7 @@ impl BaselineManager {
 
         let mut runs: Vec<String> = fs::read_dir(&bench_dir)?
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map_or(false, |ext| ext == "json"))
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
             .filter_map(|e| {
                 e.file_name()
                     .to_string_lossy()
@@ -367,7 +372,7 @@ impl BaselineManager {
         // List all run timestamps
         let mut runs: Vec<_> = fs::read_dir(&bench_dir)?
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map_or(false, |ext| ext == "json"))
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
             .collect();
 
         if runs.is_empty() {
@@ -472,8 +477,11 @@ pub fn detect_regression_with_cpd(
     let statistically_significant = current_mean > upper_bound;
 
     // --- Bayesian Change Point Detection ---
-    let change_probability =
-        crate::changepoint::bayesian_change_point_probability(current_mean, &historical_means, hazard_rate);
+    let change_probability = crate::changepoint::bayesian_change_point_probability(
+        current_mean,
+        &historical_means,
+        hazard_rate,
+    );
 
     // --- Practical Significance ---
     let percentage_change = ((current_mean - hist_mean) / hist_mean) * 100.0;
@@ -537,11 +545,8 @@ pub fn process_with_baselines(
         let crate_name = result.module.split("::").next().unwrap_or("unknown");
 
         // Load recent baselines (window-based comparison)
-        let historical = baseline_manager.load_recent_baselines(
-            crate_name,
-            &result.name,
-            config.window_size,
-        )?;
+        let historical =
+            baseline_manager.load_recent_baselines(crate_name, &result.name, config.window_size)?;
 
         let comparison_result = if !historical.is_empty() {
             // Use CPD-based comparison
