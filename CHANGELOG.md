@@ -1,3 +1,10 @@
+## [1.0.2](https://github.com/CmPons/SimpleBench/compare/v1.0.1...v1.0.2) (2025-12-13)
+
+
+### Bug Fixes
+
+* Update README.md ([8ffc3be](https://github.com/CmPons/SimpleBench/commit/8ffc3beb932d42e6fcdaaf9007fd5732ef170cbe))
+
 ## [1.0.1](https://github.com/CmPons/SimpleBench/compare/v1.0.0...v1.0.1) (2025-12-13)
 
 
