@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use cargo_metadata::{MetadataCommand, Package};
+use cargo_metadata::{DependencyKind, MetadataCommand, Package};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -48,10 +48,13 @@ pub fn analyze_workspace(workspace_root: &Path) -> Result<WorkspaceInfo> {
     })
 }
 
-/// Check if a package depends on simplebench-runtime
+/// Check if a package depends on simplebench-runtime (as regular or dev dependency)
 fn depends_on_simplebench_runtime(package: &Package) -> bool {
     package.dependencies.iter().any(|dep| {
-        dep.name == "simplebench-runtime" || dep.name == "simplebench_runtime"
+        let name_matches = dep.name == "simplebench-runtime" || dep.name == "simplebench_runtime";
+        // Accept both regular dependencies and dev-dependencies
+        let kind_ok = matches!(dep.kind, DependencyKind::Normal | DependencyKind::Development);
+        name_matches && kind_ok
     })
 }
 

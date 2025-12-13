@@ -37,24 +37,45 @@ impl Vec3 {
     }
 }
 
-// Benchmarks are conditionally compiled - only when built with cfg(test)
-// This enables idiomatic Rust patterns: dev-dependencies + #[cfg(test)]
+// Test helpers using dev-dependencies
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::Rng;
+
+    /// Generate random test vectors - uses rand dev-dependency
+    pub fn random_vectors(count: usize) -> Vec<Vec3> {
+        let mut rng = rand::thread_rng();
+        (0..count)
+            .map(|_| Vec3::new(
+                rng.gen_range(-100.0..100.0),
+                rng.gen_range(-100.0..100.0),
+                rng.gen_range(-100.0..100.0),
+            ))
+            .collect()
+    }
+
+    #[test]
+    fn test_normalize() {
+        let vectors = random_vectors(10);
+        for v in vectors {
+            let n = v.normalize();
+            let len = n.length_squared().sqrt();
+            assert!((len - 1.0).abs() < 0.001);
+        }
+    }
+}
+
+// Benchmarks using test helpers (which use dev-dependencies)
 #[cfg(test)]
 mod benchmarks {
     use super::*;
+    use super::tests::random_vectors;  // Uses rand transitively!
     use simplebench_macros::bench;
-
-    /// Benchmark-only helper function
-    pub fn bench_helper_vectors() -> Vec<Vec3> {
-        vec![Vec3::new(1.0, 2.0, 3.0); 100]
-    }
 
     #[bench]
     fn bench_vec3_normalize() {
-        let mut vectors = Vec::new();
-        for i in 0..1000 {
-            vectors.push(Vec3::new(i as f32, i as f32 * 2.0, i as f32 * 3.0));
-        }
+        let vectors = random_vectors(1000);
 
         for v in &vectors {
             let _normalized = v.normalize();
@@ -63,21 +84,16 @@ mod benchmarks {
 
     #[bench]
     fn bench_vec3_cross_product() {
-        let v1 = Vec3::new(1.0, 2.0, 3.0);
-        let v2 = Vec3::new(4.0, 5.0, 6.0);
+        let vectors = random_vectors(100);
 
-        for _ in 0..5000 {
-            let _result = v1.cross(&v2);
+        for i in 0..vectors.len() - 1 {
+            let _result = vectors[i].cross(&vectors[i + 1]);
         }
     }
 
     #[bench]
     fn bench_matrix_transform_batch() {
-        // Simulate transforming 500 vectors by a simple rotation
-        let mut vectors = Vec::new();
-        for i in 0..500 {
-            vectors.push(Vec3::new(i as f32, i as f32 * 0.5, i as f32 * 0.25));
-        }
+        let vectors = random_vectors(500);
 
         // Simple rotation-like transformation
         for v in &vectors {
