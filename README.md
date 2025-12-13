@@ -147,3 +147,7 @@ Licensed under either of:
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
+
+---
+
+*This project was co-authored with [Claude](https://claude.ai), an AI assistant by Anthropic.*
