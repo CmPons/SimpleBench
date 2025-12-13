@@ -7,6 +7,7 @@ repository.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 description = "Procedural macros for SimpleBench - provides the #[bench] attribute"
+readme = "../README.md"
 keywords = ["benchmark", "macro", "proc-macro", "testing"]
 categories = ["development-tools::procedural-macro-helpers"]
 
