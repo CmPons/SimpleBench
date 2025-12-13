@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/CmPons/SimpleBench/compare/v1.0.0...v1.0.1) (2025-12-13)
+
+
+### Bug Fixes
+
+* Add proper email for authors and crates.io publish ([4a00507](https://github.com/CmPons/SimpleBench/commit/4a005071227a0feebadd136c78ace1458e3aba5a))
+
 # 1.0.0 (2025-12-13)
 
 
