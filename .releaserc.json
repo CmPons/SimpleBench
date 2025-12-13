@@ -5,9 +5,15 @@
     "@semantic-release/release-notes-generator",
     "@semantic-release/changelog",
     [
-      "semantic-release-cargo",
+      "@semantic-release/exec",
       {
-        "registryUrl": "https://crates.io"
+        "prepareCmd": "tools/bump-versions.sh ${nextRelease.version}"
+      }
+    ],
+    [
+      "@semantic-release/exec",
+      {
+        "publishCmd": "cargo publish -p simplebench-runtime && sleep 30 && cargo publish -p simplebench-macros && sleep 30 && cargo publish -p cargo-simplebench"
       }
     ],
     "@semantic-release/github",
