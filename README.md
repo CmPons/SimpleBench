@@ -2,7 +2,6 @@
 
 [![Crates.io](https://img.shields.io/crates/v/cargo-simplebench.svg)](https://crates.io/crates/cargo-simplebench)
 [![Documentation](https://docs.rs/simplebench-runtime/badge.svg)](https://docs.rs/simplebench-runtime)
-[![License](https://img.shields.io/crates/l/cargo-simplebench.svg)](https://github.com/CmPons/simplebench#license)
 
 A minimalist microbenchmarking framework for Rust with clear regression detection.
 
