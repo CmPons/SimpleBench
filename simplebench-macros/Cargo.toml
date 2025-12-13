@@ -17,8 +17,8 @@ proc-macro = true
 syn = { version = "2.0", features = ["full"] }
 quote = "1.0"
 proc-macro2 = "1.0"
-simplebench-runtime = { version = "0.1.0", path = "../simplebench-runtime" }
+simplebench-runtime.workspace = true
 
 [dev-dependencies]
-simplebench-runtime = { version = "0.1.0", path = "../simplebench-runtime" }
+simplebench-runtime.workspace = true
 tempfile = "3.0"

@@ -15,6 +15,9 @@ repository = "https://github.com/CmPons/simplebench"
 authors = ["CmPons", "Claude <noreply@anthropic.com>"]
 rust-version = "1.70"
 
+[workspace.dependencies]
+simplebench-runtime = { version = "0.1.0", path = "simplebench-runtime" }
+
 [profile.bench]
 opt-level = 3
 debug = false
