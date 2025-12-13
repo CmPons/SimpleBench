@@ -70,6 +70,7 @@ Options:
   --threshold <P>         Regression threshold percentage (default: 5.0)
   --ci                    CI mode - exit with error on regression
   --filter <PATTERN>      Run only benchmarks matching pattern
+  --parallel              Run benchmarks in parallel (faster, may increase variance)
 ```
 
 ### Environment Variables
