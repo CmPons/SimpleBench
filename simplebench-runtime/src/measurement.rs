@@ -26,6 +26,15 @@ where
     (start.elapsed().as_millis(), total_iterations)
 }
 
+/// Get the CPU core this thread is pinned to (if any)
+fn get_pinned_core() -> usize {
+    // Check env var set by orchestrator
+    std::env::var("SIMPLEBENCH_PIN_CORE")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+}
+
 pub fn measure_with_warmup<F>(
     name: String,
     module: String,
@@ -62,10 +71,14 @@ where
     let mut all_timings = Vec::with_capacity(samples);
     let mut cpu_samples = Vec::with_capacity(samples);
 
-    // Initialize CPU monitor (will be no-op on non-Linux)
-    let monitor = CpuMonitor::new(0);
+    // Initialize CPU monitor for the pinned core
+    let cpu_core = get_pinned_core();
+    let monitor = CpuMonitor::new(cpu_core);
 
     for _ in 0..samples {
+        // Read CPU frequency BEFORE measurement (while CPU is active)
+        let freq_before = monitor.read_frequency();
+
         let start = Instant::now();
         for _ in 0..iterations {
             func();
@@ -73,10 +86,17 @@ where
         let elapsed = start.elapsed();
         all_timings.push(elapsed);
 
-        // Capture CPU state after each sample
+        // Read frequency after as well, use the higher of the two
+        let freq_after = monitor.read_frequency();
+        let frequency_khz = match (freq_before, freq_after) {
+            (Some(before), Some(after)) => Some(before.max(after)),
+            (Some(f), None) | (None, Some(f)) => Some(f),
+            (None, None) => None,
+        };
+
         let snapshot = CpuSnapshot {
             timestamp: Instant::now(),
-            frequency_khz: monitor.read_frequency(),
+            frequency_khz,
             temperature_millic: monitor.read_temperature(),
         };
         cpu_samples.push(snapshot);

@@ -54,9 +54,9 @@ pub struct BenchResult {
     pub all_timings: Vec<Duration>,
     #[serde(default)]
     pub cpu_samples: Vec<CpuSnapshot>,
-    #[serde(skip)]
+    #[serde(default)]
     pub warmup_ms: Option<u128>,
-    #[serde(skip)]
+    #[serde(default)]
     pub warmup_iterations: Option<u64>,
 }
 
@@ -82,6 +82,64 @@ pub struct SimpleBench {
 }
 
 inventory::collect!(SimpleBench);
+
+/// Benchmark info for JSON listing
+#[derive(Debug, Serialize, Deserialize)]
+pub struct BenchmarkInfo {
+    pub name: String,
+    pub module: String,
+}
+
+/// List all registered benchmarks as JSON to stdout
+///
+/// Used by the orchestrator to discover benchmark names before execution.
+pub fn list_benchmarks_json() {
+    let benchmarks: Vec<BenchmarkInfo> = inventory::iter::<SimpleBench>()
+        .map(|b| BenchmarkInfo {
+            name: b.name.to_string(),
+            module: b.module.to_string(),
+        })
+        .collect();
+    println!("{}", serde_json::to_string(&benchmarks).unwrap());
+}
+
+/// Run a single benchmark and output JSON result to stdout
+///
+/// The benchmark to run is specified via SIMPLEBENCH_BENCH_FILTER env var (exact match).
+/// The core to pin to is specified via SIMPLEBENCH_PIN_CORE env var.
+pub fn run_single_benchmark_json(config: &crate::config::BenchmarkConfig) {
+    let bench_name = std::env::var("SIMPLEBENCH_BENCH_FILTER")
+        .expect("SIMPLEBENCH_BENCH_FILTER must be set for single benchmark execution");
+
+    let pin_core: usize = std::env::var("SIMPLEBENCH_PIN_CORE")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1); // Default to core 1, not 0 (reserved)
+
+    // Set CPU affinity
+    if let Err(e) = affinity::set_thread_affinity([pin_core]) {
+        eprintln!("Warning: Failed to set affinity to core {}: {:?}", pin_core, e);
+    }
+
+    // Find and run the benchmark
+    for bench in inventory::iter::<SimpleBench>() {
+        if bench.name == bench_name {
+            let result = measure_with_warmup(
+                bench.name.to_string(),
+                bench.module.to_string(),
+                bench.func,
+                config.measurement.iterations,
+                config.measurement.samples,
+                config.measurement.warmup_duration_secs,
+            );
+            println!("{}", serde_json::to_string(&result).unwrap());
+            return;
+        }
+    }
+
+    eprintln!("ERROR: Benchmark '{}' not found", bench_name);
+    std::process::exit(1);
+}
 
 pub fn measure_function<F>(
     name: String,
@@ -380,11 +438,9 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
 
             // Load recent baselines for window-based comparison
             let mut is_regression = false;
-            if let Ok(historical) = bm.load_recent_baselines(
-                crate_name,
-                &result.name,
-                config.comparison.window_size,
-            ) {
+            if let Ok(historical) =
+                bm.load_recent_baselines(crate_name, &result.name, config.comparison.window_size)
+            {
                 if !historical.is_empty() {
                     // Use CPD-based comparison
                     let comparison_result = crate::baseline::detect_regression_with_cpd(
@@ -399,7 +455,11 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
                     is_regression = comparison_result.is_regression;
 
                     if let Some(ref comparison) = comparison_result.comparison {
-                        print_comparison_line(comparison, &result.name, comparison_result.is_regression);
+                        print_comparison_line(
+                            comparison,
+                            &result.name,
+                            comparison_result.is_regression,
+                        );
                     }
 
                     comparisons.push(comparison_result);
