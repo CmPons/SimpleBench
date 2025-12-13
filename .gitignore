@@ -1,6 +1,7 @@
-target/**
-**/target
+target/
+**/target/
 .benches/
 **/.benches/
 .claude/
 CLAUDE.md
+**/Cargo.lock
