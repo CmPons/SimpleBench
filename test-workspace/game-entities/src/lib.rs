@@ -1,5 +1,3 @@
-use simplebench_macros::bench;
-
 /// Mock game entity
 #[derive(Clone)]
 pub struct Entity {
@@ -30,42 +28,49 @@ impl Entity {
     }
 }
 
-#[bench]
-fn bench_entity_creation() {
-    let mut entities = Vec::new();
-    for i in 0..2000 {
-        entities.push(Entity::new(i));
-    }
-}
+// Benchmarks are conditionally compiled - only when built with cfg(test)
+#[cfg(test)]
+mod benchmarks {
+    use super::*;
+    use simplebench_macros::bench;
 
-#[bench]
-fn bench_entity_update_loop() {
-    let mut entities = Vec::new();
-    for i in 0..1000 {
-        entities.push(Entity::new(i));
-    }
-
-    // Simulate 10 frame updates
-    for _ in 0..10 {
-        for entity in &mut entities {
-            entity.update(0.016); // ~60 FPS
+    #[bench]
+    fn bench_entity_creation() {
+        let mut entities = Vec::new();
+        for i in 0..2000 {
+            entities.push(Entity::new(i));
         }
     }
-}
 
-#[bench]
-fn bench_entity_filtering() {
-    let mut entities = Vec::new();
-    for i in 0..3000 {
-        let mut e = Entity::new(i);
-        e.active = i % 3 != 0; // ~2/3 active
-        e.health = (i % 100) as f32;
-        entities.push(e);
+    #[bench]
+    fn bench_entity_update_loop() {
+        let mut entities = Vec::new();
+        for i in 0..1000 {
+            entities.push(Entity::new(i));
+        }
+
+        // Simulate 10 frame updates
+        for _ in 0..10 {
+            for entity in &mut entities {
+                entity.update(0.016); // ~60 FPS
+            }
+        }
     }
 
-    // Filter active entities with health > 50
-    let _active_healthy: Vec<_> = entities
-        .iter()
-        .filter(|e| e.active && e.health > 50.0)
-        .collect();
+    #[bench]
+    fn bench_entity_filtering() {
+        let mut entities = Vec::new();
+        for i in 0..3000 {
+            let mut e = Entity::new(i);
+            e.active = i % 3 != 0; // ~2/3 active
+            e.health = (i % 100) as f32;
+            entities.push(e);
+        }
+
+        // Filter active entities with health > 50
+        let _active_healthy: Vec<_> = entities
+            .iter()
+            .filter(|e| e.active && e.health > 50.0)
+            .collect();
+    }
 }

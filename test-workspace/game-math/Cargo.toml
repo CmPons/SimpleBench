@@ -3,12 +3,9 @@ name = "game-math"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-simplebench-runtime = { path = "../../simplebench-runtime" }
-simplebench-macros = { path = "../../simplebench-macros" }
-
 [lib]
 crate-type = ["rlib"]
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(bench)'] }
+[dependencies]
+simplebench-runtime = { path = "../../simplebench-runtime" }
+simplebench-macros = { path = "../../simplebench-macros" }

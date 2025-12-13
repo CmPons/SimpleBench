@@ -1,11 +1,3 @@
-use simplebench_macros::bench;
-
-#[cfg(bench)]
-pub fn bench_only_helper() -> Vec<Vec3> {
-    // This function only exists when built with SimpleBench
-    vec![Vec3::new(1.0, 2.0, 3.0); 100]
-}
-
 /// Simple 3D vector for testing
 #[derive(Clone, Copy, Debug)]
 pub struct Vec3 {
@@ -45,38 +37,51 @@ impl Vec3 {
     }
 }
 
-#[bench]
-fn bench_vec3_normalize() {
-    let mut vectors = Vec::new();
-    for i in 0..1000 {
-        vectors.push(Vec3::new(i as f32, i as f32 * 2.0, i as f32 * 3.0));
+// Benchmarks are conditionally compiled - only when built with cfg(test)
+// This enables idiomatic Rust patterns: dev-dependencies + #[cfg(test)]
+#[cfg(test)]
+mod benchmarks {
+    use super::*;
+    use simplebench_macros::bench;
+
+    /// Benchmark-only helper function
+    pub fn bench_helper_vectors() -> Vec<Vec3> {
+        vec![Vec3::new(1.0, 2.0, 3.0); 100]
     }
 
-    for v in &vectors {
-        let _normalized = v.normalize();
-    }
-}
+    #[bench]
+    fn bench_vec3_normalize() {
+        let mut vectors = Vec::new();
+        for i in 0..1000 {
+            vectors.push(Vec3::new(i as f32, i as f32 * 2.0, i as f32 * 3.0));
+        }
 
-#[bench]
-fn bench_vec3_cross_product() {
-    let v1 = Vec3::new(1.0, 2.0, 3.0);
-    let v2 = Vec3::new(4.0, 5.0, 6.0);
-
-    for _ in 0..5000 {
-        let _result = v1.cross(&v2);
-    }
-}
-
-#[bench]
-fn bench_matrix_transform_batch() {
-    // Simulate transforming 500 vectors by a simple rotation
-    let mut vectors = Vec::new();
-    for i in 0..500 {
-        vectors.push(Vec3::new(i as f32, i as f32 * 0.5, i as f32 * 0.25));
+        for v in &vectors {
+            let _normalized = v.normalize();
+        }
     }
 
-    // Simple rotation-like transformation
-    for v in &vectors {
-        let _transformed = Vec3::new(v.x * 0.866 - v.y * 0.5, v.x * 0.5 + v.y * 0.866, v.z);
+    #[bench]
+    fn bench_vec3_cross_product() {
+        let v1 = Vec3::new(1.0, 2.0, 3.0);
+        let v2 = Vec3::new(4.0, 5.0, 6.0);
+
+        for _ in 0..5000 {
+            let _result = v1.cross(&v2);
+        }
+    }
+
+    #[bench]
+    fn bench_matrix_transform_batch() {
+        // Simulate transforming 500 vectors by a simple rotation
+        let mut vectors = Vec::new();
+        for i in 0..500 {
+            vectors.push(Vec3::new(i as f32, i as f32 * 0.5, i as f32 * 0.25));
+        }
+
+        // Simple rotation-like transformation
+        for v in &vectors {
+            let _transformed = Vec3::new(v.x * 0.866 - v.y * 0.5, v.x * 0.5 + v.y * 0.866, v.z);
+        }
     }
 }

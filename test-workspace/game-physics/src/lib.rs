@@ -1,5 +1,3 @@
-use simplebench_macros::bench;
-
 /// Simple AABB (Axis-Aligned Bounding Box)
 #[derive(Clone, Copy)]
 pub struct AABB {
@@ -42,41 +40,48 @@ impl AABB {
     }
 }
 
-#[bench]
-fn bench_aabb_intersection_checks() {
-    let mut boxes = Vec::new();
-    for i in 0..200 {
-        let offset = i as f32 * 0.5;
-        boxes.push(AABB::new(offset, offset, offset, offset + 2.0, offset + 2.0, offset + 2.0));
-    }
+// Benchmarks are conditionally compiled - only when built with cfg(test)
+#[cfg(test)]
+mod benchmarks {
+    use super::*;
+    use simplebench_macros::bench;
 
-    let mut collision_count = 0;
-    for i in 0..boxes.len() {
-        for j in (i + 1)..boxes.len() {
-            if boxes[i].intersects(&boxes[j]) {
-                collision_count += 1;
-            }
+    #[bench]
+    fn bench_aabb_intersection_checks() {
+        let mut boxes = Vec::new();
+        for i in 0..200 {
+            let offset = i as f32 * 0.5;
+            boxes.push(AABB::new(offset, offset, offset, offset + 2.0, offset + 2.0, offset + 2.0));
         }
-    }
 
-    // Prevent optimization
-    std::hint::black_box(collision_count);
-}
-
-#[bench]
-fn bench_point_containment_tests() {
-    let aabb = AABB::new(-10.0, -10.0, -10.0, 10.0, 10.0, 10.0);
-
-    let mut inside_count = 0;
-    for x in -15..15 {
-        for y in -15..15 {
-            for z in -15..15 {
-                if aabb.contains_point(x as f32, y as f32, z as f32) {
-                    inside_count += 1;
+        let mut collision_count = 0;
+        for i in 0..boxes.len() {
+            for j in (i + 1)..boxes.len() {
+                if boxes[i].intersects(&boxes[j]) {
+                    collision_count += 1;
                 }
             }
         }
+
+        // Prevent optimization
+        std::hint::black_box(collision_count);
     }
 
-    std::hint::black_box(inside_count);
+    #[bench]
+    fn bench_point_containment_tests() {
+        let aabb = AABB::new(-10.0, -10.0, -10.0, 10.0, 10.0, 10.0);
+
+        let mut inside_count = 0;
+        for x in -15..15 {
+            for y in -15..15 {
+                for z in -15..15 {
+                    if aabb.contains_point(x as f32, y as f32, z as f32) {
+                        inside_count += 1;
+                    }
+                }
+            }
+        }
+
+        std::hint::black_box(inside_count);
+    }
 }

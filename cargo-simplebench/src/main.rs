@@ -12,7 +12,7 @@ use colored::*;
 use simplebench_runtime::{
     baseline::{BaselineManager, ComparisonResult},
     config::BenchmarkConfig,
-    BenchmarkInfo, BenchResult,
+    BenchResult, BenchmarkInfo,
 };
 use std::collections::HashMap;
 use std::env;
@@ -229,11 +229,28 @@ fn main() -> Result<()> {
     }
     println!();
 
-    // Step 2: Build workspace and select rlibs
-    println!("{}", "Compiling workspace (bench profile)".green().bold());
-    let profile = "bench";
-    let rlibs =
-        rlib_selection::select_rlibs(&workspace_root, profile).context("Failed to select rlibs")?;
+    // Step 2: Build workspace crates with cfg(test) and select rlibs
+    println!(
+        "{}",
+        "Compiling benchmark crates (release + cfg(test))".green().bold()
+    );
+
+    // Use isolated target directory to avoid cache conflicts
+    let target_dir = workspace_info.target_directory.join("simplebench");
+
+    // Extract benchmark crate names
+    let benchmark_crate_names: Vec<String> = workspace_info
+        .benchmark_crates
+        .iter()
+        .map(|c| c.name.clone())
+        .collect();
+
+    let rlibs = rlib_selection::build_and_select_rlibs(
+        &workspace_root,
+        &benchmark_crate_names,
+        &target_dir,
+    )
+    .context("Failed to build and select rlibs")?;
 
     println!(
         "     {} {} rlib files",
@@ -271,15 +288,7 @@ fn main() -> Result<()> {
     println!("{}", "Compiling runner".green().bold());
     let runner_binary = workspace_info.target_directory.join("simplebench_runner");
 
-    // Derive deps_dir from the actual rlib paths (bench profile uses release directory)
-    let deps_dir = if let Some(first_rlib) = rlibs.values().next() {
-        first_rlib
-            .parent()
-            .context("Failed to get parent directory of rlib")?
-            .to_path_buf()
-    } else {
-        anyhow::bail!("No rlibs found");
-    };
+    let deps_dir = target_dir.join("release").join("deps");
 
     compile::compile_runner(&runner_path, &runner_binary, &rlibs, &deps_dir)
         .context("Failed to compile runner")?;
@@ -301,7 +310,10 @@ fn main() -> Result<()> {
     if benchmarks.is_empty() {
         eprintln!("{}", "error: No benchmarks found!".red().bold());
         if run_config.bench_filter.is_some() {
-            eprintln!("{}", "       (filter may have excluded all benchmarks)".dimmed());
+            eprintln!(
+                "{}",
+                "       (filter may have excluded all benchmarks)".dimmed()
+            );
         }
         std::process::exit(1);
     }
@@ -353,7 +365,10 @@ fn main() -> Result<()> {
 fn discover_benchmarks(runner: &Path, workspace_root: &Path) -> Result<Vec<BenchmarkInfo>> {
     let output = Command::new(runner)
         .arg("--list")
-        .env("SIMPLEBENCH_WORKSPACE_ROOT", workspace_root.display().to_string())
+        .env(
+            "SIMPLEBENCH_WORKSPACE_ROOT",
+            workspace_root.display().to_string(),
+        )
         .output()
         .context("Failed to run runner --list")?;
 
@@ -436,7 +451,14 @@ fn run_benchmarks_sequential(
     let cores = vec![1]; // Sequential always uses core 1
     output::print_run_header(benchmarks.len(), 1, false);
 
-    run_benchmarks_with_cores(runner, workspace_root, benchmarks, &cores, run_config, config)
+    run_benchmarks_with_cores(
+        runner,
+        workspace_root,
+        benchmarks,
+        &cores,
+        run_config,
+        config,
+    )
 }
 
 /// Run benchmarks in parallel (one per physical core)
@@ -463,7 +485,14 @@ fn run_benchmarks_parallel(
 
     output::print_run_header(benchmarks.len(), cores.len(), true);
 
-    run_benchmarks_with_cores(runner, workspace_root, benchmarks, &cores, run_config, config)
+    run_benchmarks_with_cores(
+        runner,
+        workspace_root,
+        benchmarks,
+        &cores,
+        run_config,
+        config,
+    )
 }
 
 /// Run benchmarks using specified cores, spawning one runner per benchmark
@@ -530,11 +559,8 @@ fn run_benchmarks_with_cores(
                         output::print_benchmark_result(&result, core);
 
                         // Process baseline comparison immediately
-                        let comparison = process_single_result_baseline(
-                            &result,
-                            &baseline_manager,
-                            config,
-                        );
+                        let comparison =
+                            process_single_result_baseline(&result, &baseline_manager, config);
                         all_comparisons.push(comparison);
 
                         println!(); // Blank line after each benchmark + comparison
@@ -578,11 +604,9 @@ fn process_single_result_baseline(
 
     if let Some(ref bm) = baseline_manager {
         // Load recent baselines for window-based comparison
-        if let Ok(historical) = bm.load_recent_baselines(
-            crate_name,
-            &result.name,
-            config.comparison.window_size,
-        ) {
+        if let Ok(historical) =
+            bm.load_recent_baselines(crate_name, &result.name, config.comparison.window_size)
+        {
             if !historical.is_empty() {
                 // Use CPD-based comparison
                 let comp_result = simplebench_runtime::baseline::detect_regression_with_cpd(
@@ -628,4 +652,3 @@ fn process_single_result_baseline(
         is_regression: false,
     }
 }
-

@@ -1,143 +1,48 @@
 use anyhow::{Context, Result};
-use serde::Deserialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[derive(Debug, Clone)]
-pub struct RlibInfo {
-    pub path: PathBuf,
-    pub opt_level: String,
-}
 
-/// Select the correct rlib files for linking the runner
+/// Build workspace crates with cfg(test) enabled and select rlibs for linking
 ///
-/// Uses cargo build --message-format=json to identify which rlibs have opt-level=3
-/// Falls back to file size heuristic if JSON parsing fails
-pub fn select_rlibs(workspace_root: &Path, profile: &str) -> Result<HashMap<String, PathBuf>> {
-    // Try JSON parsing approach first (preferred)
-    match select_rlibs_json(workspace_root, profile) {
-        Ok(rlibs) => Ok(rlibs),
-        Err(_e) => {
-            // Fallback to file size heuristic
-            let target_dir = workspace_root.join("target").join(profile).join("deps");
-            select_rlibs_by_size(&target_dir)
-        }
-    }
-}
+/// Uses `cargo rustc -p <crate> -- --cfg test` to pass the flag only to workspace crates,
+/// not to external dependencies. This enables idiomatic `#[cfg(test)]` conditional compilation.
+///
+/// Uses an isolated target directory (target/simplebench) to avoid cache conflicts.
+pub fn build_and_select_rlibs(
+    workspace_root: &Path,
+    benchmark_crates: &[String],
+    target_dir: &Path,
+) -> Result<HashMap<String, PathBuf>> {
+    // Build each benchmark crate with --cfg test (dependencies build normally)
+    for crate_name in benchmark_crates {
+        println!("     Building {} with cfg(test)", crate_name);
 
-#[derive(Debug, Deserialize)]
-struct CargoMessage {
-    reason: String,
-    #[serde(default)]
-    target: Option<Target>,
-    #[serde(default)]
-    profile: Option<Profile>,
-    #[serde(default)]
-    filenames: Vec<PathBuf>,
-}
+        let output = Command::new("cargo")
+            .arg("rustc")
+            .arg("-p")
+            .arg(crate_name)
+            .arg("--release")
+            .arg("--target-dir")
+            .arg(target_dir)
+            .arg("--")
+            .arg("--cfg")
+            .arg("test")
+            .current_dir(workspace_root)
+            .output()
+            .context(format!("Failed to execute cargo rustc for {}", crate_name))?;
 
-#[derive(Debug, Deserialize)]
-struct Target {
-    name: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct Profile {
-    opt_level: String,
-}
-
-/// Primary approach: Parse cargo build JSON output to select opt-level=3 rlibs
-fn select_rlibs_json(workspace_root: &Path, profile: &str) -> Result<HashMap<String, PathBuf>> {
-    // Build workspace with JSON output
-    let mut cmd = Command::new("cargo");
-    cmd.arg("build")
-        .arg("--message-format=json")
-        .current_dir(workspace_root);
-
-    if profile == "bench" {
-        cmd.arg("--profile").arg("bench");
-        // Set custom cfg flag so users can use #[cfg(bench)]
-        cmd.env("RUSTFLAGS", "--cfg bench");
-    }
-
-    let output = cmd
-        .output()
-        .context("Failed to execute cargo build")?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        anyhow::bail!("Cargo build failed: {}", stderr);
-    }
-
-    // Parse JSON output line by line
-    let stdout = String::from_utf8(output.stdout)
-        .context("Cargo output is not valid UTF-8")?;
-
-    let mut rlib_versions: HashMap<String, Vec<RlibInfo>> = HashMap::new();
-
-    for line in stdout.lines() {
-        let msg: CargoMessage = match serde_json::from_str(line) {
-            Ok(m) => m,
-            Err(_) => continue, // Skip non-JSON lines
-        };
-
-        if msg.reason != "compiler-artifact" {
-            continue;
-        }
-
-        let target = match msg.target {
-            Some(t) => t,
-            None => continue,
-        };
-
-        let profile = match msg.profile {
-            Some(p) => p,
-            None => continue,
-        };
-
-        // Find .rlib file in filenames
-        if let Some(rlib_path) = msg.filenames.iter().find(|f| {
-            f.extension().and_then(|e| e.to_str()) == Some("rlib")
-        }) {
-            let crate_name = target.name.replace('-', "_");
-
-            rlib_versions
-                .entry(crate_name)
-                .or_default()
-                .push(RlibInfo {
-                    path: rlib_path.clone(),
-                    opt_level: profile.opt_level,
-                });
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to build {}: {}", crate_name, stderr);
         }
     }
 
-    // Select opt-level=3 versions (or highest available)
-    let mut selected_rlibs = HashMap::new();
-
-    for (crate_name, versions) in rlib_versions {
-        let selected = if versions.len() == 1 {
-            // Only one version exists
-            &versions[0]
-        } else {
-            // Multiple versions - select opt-level=3 (target build)
-            versions
-                .iter()
-                .find(|v| v.opt_level == "3")
-                .or_else(|| {
-                    // Fallback: highest opt-level
-                    versions
-                        .iter()
-                        .max_by_key(|v| v.opt_level.parse::<u8>().unwrap_or(0))
-                })
-                .context("No rlib versions found")?
-        };
-
-        selected_rlibs.insert(crate_name, selected.path.clone());
-    }
-
-    Ok(selected_rlibs)
+    // Now select rlibs from the isolated target directory
+    let deps_dir = target_dir.join("release").join("deps");
+    select_rlibs_by_size(&deps_dir)
 }
 
 /// Fallback approach: Select rlibs by file size (smaller = opt-level=3)
