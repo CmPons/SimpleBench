@@ -51,8 +51,8 @@ pub fn build_and_select_rlibs(
         // Step 2: Parse JSON to collect rlib paths
         let crate_rlibs = parse_cargo_json(&output.stdout, crate_name)?;
 
-        // Step 3: Get source path for this crate
-        let src_path = get_crate_src_path(workspace_root, crate_name)?;
+        // Step 3: Get source path and manifest dir for this crate
+        let (src_path, manifest_dir) = get_crate_paths(workspace_root, crate_name)?;
 
         // Step 4: Manually invoke rustc to produce rlib with --cfg test
         let extern_args = build_extern_args(&crate_rlibs);
@@ -73,6 +73,7 @@ pub fn build_and_select_rlibs(
             .args(&extern_args)
             .arg("--out-dir")
             .arg(&out_dir)
+            .env("CARGO_MANIFEST_DIR", &manifest_dir)
             .current_dir(workspace_root);
 
         let rustc_output = cmd
@@ -197,8 +198,8 @@ fn build_extern_args(rlibs: &HashMap<String, PathBuf>) -> Vec<String> {
         .collect()
 }
 
-/// Get source path for a crate from cargo metadata
-fn get_crate_src_path(workspace_root: &Path, crate_name: &str) -> Result<PathBuf> {
+/// Get source path and manifest directory for a crate from cargo metadata
+fn get_crate_paths(workspace_root: &Path, crate_name: &str) -> Result<(PathBuf, PathBuf)> {
     let output = Command::new("cargo")
         .args(["metadata", "--format-version=1", "--no-deps"])
         .current_dir(workspace_root)
@@ -218,6 +219,7 @@ fn get_crate_src_path(workspace_root: &Path, crate_name: &str) -> Result<PathBuf
     #[derive(Deserialize)]
     struct Package {
         name: String,
+        manifest_path: PathBuf,
         targets: Vec<Target>,
     }
 
@@ -234,7 +236,11 @@ fn get_crate_src_path(workspace_root: &Path, crate_name: &str) -> Result<PathBuf
         if package.name == crate_name {
             for target in &package.targets {
                 if target.kind.iter().any(|k| k == "lib" || k == "rlib") {
-                    return Ok(target.src_path.clone());
+                    // manifest_path is the Cargo.toml path, we need its parent directory
+                    let manifest_dir = package.manifest_path.parent()
+                        .ok_or_else(|| anyhow::anyhow!("Could not get parent dir of manifest path"))?
+                        .to_path_buf();
+                    return Ok((target.src_path.clone(), manifest_dir));
                 }
             }
         }
