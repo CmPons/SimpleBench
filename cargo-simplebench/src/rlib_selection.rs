@@ -237,8 +237,12 @@ fn get_crate_paths(workspace_root: &Path, crate_name: &str) -> Result<(PathBuf, 
             for target in &package.targets {
                 if target.kind.iter().any(|k| k == "lib" || k == "rlib") {
                     // manifest_path is the Cargo.toml path, we need its parent directory
-                    let manifest_dir = package.manifest_path.parent()
-                        .ok_or_else(|| anyhow::anyhow!("Could not get parent dir of manifest path"))?
+                    let manifest_dir = package
+                        .manifest_path
+                        .parent()
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("Could not get parent dir of manifest path")
+                        })?
                         .to_path_buf();
                     return Ok((target.src_path.clone(), manifest_dir));
                 }
