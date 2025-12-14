@@ -1,3 +1,12 @@
+## [1.0.6](https://github.com/CmPons/SimpleBench/compare/v1.0.5...v1.0.6) (2025-12-14)
+
+
+### Bug Fixes
+
+* Fix flake.nix so it uses a more standard approach and can be properly used as an input ([2f359e8](https://github.com/CmPons/SimpleBench/commit/2f359e8e24388eedc07cf183d3643d543702cc30))
+* Fix formatting and added missing files ([e353c52](https://github.com/CmPons/SimpleBench/commit/e353c52085b1b4934f65b54cceb9f9e7601cf41e))
+* Set CARGO_MANIFEST_DIR when invoking rustc for proc macro compatibility ([b2d7783](https://github.com/CmPons/SimpleBench/commit/b2d7783743c629cc674a477aeefcdff4dc1236a0))
+
 ## [1.0.5](https://github.com/CmPons/SimpleBench/compare/v1.0.4...v1.0.5) (2025-12-14)
 
 
