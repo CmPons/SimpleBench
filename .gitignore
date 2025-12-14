@@ -4,4 +4,3 @@ target/
 **/.benches/
 .claude/
 CLAUDE.md
-**/Cargo.lock
