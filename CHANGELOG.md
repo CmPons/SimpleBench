@@ -1,3 +1,40 @@
+# [2.0.0](https://github.com/CmPons/SimpleBench/compare/v1.0.6...v2.0.0) (2025-12-17)
+
+
+* feat!: add setup separation for benchmarks ([3b1ae44](https://github.com/CmPons/SimpleBench/commit/3b1ae4468370d5825a7528c15b1cad6a4dec0db6))
+
+
+### BREAKING CHANGES
+
+* SimpleBench struct signature changed from `func: fn()` to
+`run: fn(&BenchmarkConfig) -> BenchResult`. Existing benchmarks using the
+`#[bench]` macro will automatically use the new architecture.
+
+This change solves the critical performance bug where setup code ran on every
+iteration (1,000,000+ times with default settings). Now setup runs exactly once.
+
+New API:
+- Simple benchmarks (no setup): `#[bench] fn bench() { ... }` - unchanged usage
+- With setup: `#[bench(setup = expr)] fn bench(data: &T) { ... }` - new pattern
+
+Runtime changes:
+- Added `measure_simple()` for benchmarks without setup
+- Added `measure_with_setup()` for benchmarks with setup (setup runs once)
+- SimpleBench now stores a runner function that handles its own measurement
+
+Macro changes:
+- Parses `setup = <expr>` attribute (closure or function name)
+- Validates: setup requires &T param, param requires setup (compile errors)
+- Generates appropriate wrapper calling measure_simple or measure_with_setup
+
+Performance impact:
+- bench_vec3_normalize: was ~5ms (setup included) → now 20ns (operation only)
+- Benchmarks that previously timed out now complete in seconds
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+
 ## [1.0.6](https://github.com/CmPons/SimpleBench/compare/v1.0.5...v1.0.6) (2025-12-14)
 
 
