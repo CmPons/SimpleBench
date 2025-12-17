@@ -41,14 +41,47 @@ simplebench-macros = "2.0.0"
 mod benchmarks {
     use simplebench_macros::bench;
 
+    // Simple benchmark - entire function body is measured
     #[bench]
     fn my_function() {
-        // Code to benchmark
         let sum: u64 = (0..1000).sum();
         std::hint::black_box(sum);
     }
 }
 ```
+
+### Benchmarks with Setup
+
+For benchmarks where setup is expensive, use the `setup` attribute to run setup code **once** instead of on every iteration:
+
+```rust
+#[cfg(test)]
+mod benchmarks {
+    use simplebench_macros::bench;
+
+    // Setup runs once, only the operation is measured
+    #[bench(setup = || generate_test_data(1000))]
+    fn benchmark_with_setup(data: &Vec<u64>) {
+        let sum: u64 = data.iter().sum();
+        std::hint::black_box(sum);
+    }
+
+    // Named setup function also works
+    fn create_large_dataset() -> Vec<String> {
+        (0..10000).map(|i| format!("item_{}", i)).collect()
+    }
+
+    #[bench(setup = create_large_dataset)]
+    fn benchmark_filtering(data: &Vec<String>) {
+        let filtered: Vec<_> = data.iter()
+            .filter(|s| s.contains("5"))
+            .collect();
+        std::hint::black_box(filtered);
+    }
+}
+```
+
+**Why this matters:** Without setup separation, a benchmark with 1000 samples × 1000 iterations runs setup code **1,000,000 times**. With `setup`, it runs exactly **once**.
 
 ### Run Benchmarks
 
