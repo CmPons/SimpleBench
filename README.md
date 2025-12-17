@@ -30,8 +30,8 @@ In your crate's `Cargo.toml`:
 
 ```toml
 [dev-dependencies]
-simplebench-runtime = "1.0.6"
-simplebench-macros = "1.0.6"
+simplebench-runtime = "2.0.0"
+simplebench-macros = "2.0.0"
 ```
 
 ### Write a Benchmark
