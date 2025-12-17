@@ -70,33 +70,30 @@ mod tests {
 #[cfg(test)]
 mod benchmarks {
     use super::*;
-    use super::tests::random_vectors;  // Uses rand transitively!
+    use super::tests::random_vectors; // Uses rand transitively!
     use simplebench_macros::bench;
 
-    #[bench]
-    fn bench_vec3_normalize() {
-        let vectors = random_vectors(1000);
-
-        for v in &vectors {
+    // Setup pattern: random_vectors runs ONCE, not on every iteration
+    // Before: random_vectors ran 1,000,000+ times (1000 samples × 1000 iterations)
+    // After: random_vectors runs exactly once, then normalize is measured
+    #[bench(setup = || random_vectors(1000))]
+    fn bench_vec3_normalize(vectors: &Vec<Vec3>) {
+        for v in vectors {
             let _normalized = v.normalize();
         }
     }
 
-    #[bench]
-    fn bench_vec3_cross_product() {
-        let vectors = random_vectors(100);
-
+    #[bench(setup = || random_vectors(100))]
+    fn bench_vec3_cross_product(vectors: &Vec<Vec3>) {
         for i in 0..vectors.len() - 1 {
             let _result = vectors[i].cross(&vectors[i + 1]);
         }
     }
 
-    #[bench]
-    fn bench_matrix_transform_batch() {
-        let vectors = random_vectors(500);
-
+    #[bench(setup = || random_vectors(500))]
+    fn bench_matrix_transform_batch(vectors: &Vec<Vec3>) {
         // Simple rotation-like transformation
-        for v in &vectors {
+        for v in vectors {
             let _transformed = Vec3::new(v.x * 0.866 - v.y * 0.5, v.x * 0.5 + v.y * 0.866, v.z);
         }
     }

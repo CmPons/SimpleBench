@@ -143,13 +143,17 @@ pub struct Comparison {
 ///
 /// This struct is used by the `inventory` crate for compile-time benchmark registration.
 /// The `#[bench]` macro from `simplebench-macros` generates these registrations automatically.
+///
+/// The `run` function encapsulates the entire measurement process: it receives config,
+/// performs warmup, runs measurement iterations, and returns a complete `BenchResult`.
+/// This design allows benchmarks with setup to run setup once before measurement begins.
 pub struct SimpleBench {
     /// Name of the benchmark function
     pub name: &'static str,
     /// Module path where the benchmark is defined
     pub module: &'static str,
-    /// The benchmark function to execute
-    pub func: fn(),
+    /// The benchmark runner function that performs measurement and returns results
+    pub run: fn(&crate::config::BenchmarkConfig) -> BenchResult,
 }
 
 inventory::collect!(SimpleBench);
@@ -202,14 +206,8 @@ pub fn run_single_benchmark_json(config: &crate::config::BenchmarkConfig) {
     // Find and run the benchmark
     for bench in inventory::iter::<SimpleBench>() {
         if bench.name == bench_name {
-            let result = measure_with_warmup(
-                bench.name.to_string(),
-                bench.module.to_string(),
-                bench.func,
-                config.measurement.iterations,
-                config.measurement.samples,
-                config.measurement.warmup_duration_secs,
-            );
+            // The benchmark's run function handles warmup, measurement, and returns results
+            let result = (bench.run)(config);
             println!("{}", serde_json::to_string(&result).unwrap());
             return;
         }
@@ -389,15 +387,8 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
                 continue; // Skip this benchmark
             }
         }
-        // Run benchmark
-        let result = measure_with_warmup(
-            bench.name.to_string(),
-            bench.module.to_string(),
-            bench.func,
-            config.measurement.iterations,
-            config.measurement.samples,
-            config.measurement.warmup_duration_secs,
-        );
+        // Run benchmark - the run function handles warmup, measurement, and returns results
+        let result = (bench.run)(config);
 
         // Print benchmark result immediately
         print_benchmark_result_line(&result);

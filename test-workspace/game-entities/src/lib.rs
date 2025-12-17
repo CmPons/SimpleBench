@@ -34,6 +34,7 @@ mod benchmarks {
     use super::*;
     use simplebench_macros::bench;
 
+    // Simple benchmark (no setup) - entity creation IS what we're measuring
     #[bench]
     fn bench_entity_creation() {
         let mut entities = Vec::new();
@@ -42,12 +43,16 @@ mod benchmarks {
         }
     }
 
-    #[bench]
-    fn bench_entity_update_loop() {
-        let mut entities = Vec::new();
-        for i in 0..1000 {
-            entities.push(Entity::new(i));
-        }
+    // Setup helper: creates entities for update benchmarks
+    fn create_entities(count: u32) -> Vec<Entity> {
+        (0..count).map(Entity::new).collect()
+    }
+
+    // Setup pattern: create entities once, measure updates separately
+    #[bench(setup = || create_entities(1000))]
+    fn bench_entity_update_loop(entities: &Vec<Entity>) {
+        // Clone to allow mutation without affecting setup data
+        let mut entities = entities.clone();
 
         // Simulate 10 frame updates
         for _ in 0..10 {
@@ -57,16 +62,21 @@ mod benchmarks {
         }
     }
 
-    #[bench]
-    fn bench_entity_filtering() {
-        let mut entities = Vec::new();
-        for i in 0..3000 {
-            let mut e = Entity::new(i);
-            e.active = i % 3 != 0; // ~2/3 active
-            e.health = (i % 100) as f32;
-            entities.push(e);
-        }
+    // Setup helper: creates entities with varied properties for filtering
+    fn create_filterable_entities() -> Vec<Entity> {
+        (0..3000u32)
+            .map(|i| {
+                let mut e = Entity::new(i);
+                e.active = i % 3 != 0; // ~2/3 active
+                e.health = (i % 100) as f32;
+                e
+            })
+            .collect()
+    }
 
+    // Setup pattern: entity creation is expensive, filtering is what we measure
+    #[bench(setup = create_filterable_entities)]
+    fn bench_entity_filtering(entities: &Vec<Entity>) {
         // Filter active entities with health > 50
         let _active_healthy: Vec<_> = entities
             .iter()

@@ -1,4 +1,4 @@
-use crate::{calculate_percentiles, BenchResult, CpuMonitor, CpuSnapshot};
+use crate::{calculate_percentiles, config::BenchmarkConfig, BenchResult, CpuMonitor, CpuSnapshot};
 use std::time::{Duration, Instant};
 
 /// Warmup benchmark using time-based exponential doubling (Criterion-style)
@@ -33,6 +33,167 @@ fn get_pinned_core() -> usize {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(0)
+}
+
+/// Warmup using a closure (generic version for new measurement functions)
+fn warmup_closure<F>(func: &mut F, duration: Duration, iterations: usize) -> (u128, u64)
+where
+    F: FnMut(),
+{
+    let start = Instant::now();
+    let mut total_iterations = 0u64;
+    let mut batch_size = 1u64;
+
+    while start.elapsed() < duration {
+        for _ in 0..batch_size {
+            for _ in 0..iterations {
+                func();
+            }
+        }
+        total_iterations += batch_size * (iterations as u64);
+        batch_size *= 2;
+    }
+
+    (start.elapsed().as_millis(), total_iterations)
+}
+
+/// Measure a closure, collecting timing samples with CPU monitoring
+fn measure_closure<F>(
+    func: &mut F,
+    iterations: usize,
+    samples: usize,
+) -> (Vec<Duration>, Vec<CpuSnapshot>)
+where
+    F: FnMut(),
+{
+    let mut all_timings = Vec::with_capacity(samples);
+    let mut cpu_samples = Vec::with_capacity(samples);
+
+    // Initialize CPU monitor for the pinned core
+    let cpu_core = get_pinned_core();
+    let monitor = CpuMonitor::new(cpu_core);
+
+    for _ in 0..samples {
+        // Read CPU frequency BEFORE measurement (while CPU is active)
+        let freq_before = monitor.read_frequency();
+
+        let start = Instant::now();
+        for _ in 0..iterations {
+            func();
+        }
+        let elapsed = start.elapsed();
+        all_timings.push(elapsed);
+
+        // Read frequency after as well, use the higher of the two
+        let freq_after = monitor.read_frequency();
+        let frequency_khz = match (freq_before, freq_after) {
+            (Some(before), Some(after)) => Some(before.max(after)),
+            (Some(f), None) | (None, Some(f)) => Some(f),
+            (None, None) => None,
+        };
+
+        let snapshot = CpuSnapshot {
+            timestamp: Instant::now(),
+            frequency_khz,
+            temperature_millic: monitor.read_temperature(),
+        };
+        cpu_samples.push(snapshot);
+    }
+
+    (all_timings, cpu_samples)
+}
+
+/// Measure a simple benchmark (no setup) using the new architecture.
+///
+/// This function is called by the generated benchmark wrapper for benchmarks
+/// without setup code. The config is passed in, and a complete BenchResult is returned.
+pub fn measure_simple<F>(
+    config: &BenchmarkConfig,
+    name: &str,
+    module: &str,
+    mut func: F,
+) -> BenchResult
+where
+    F: FnMut(),
+{
+    // Warmup
+    let (warmup_ms, warmup_iters) = warmup_closure(
+        &mut func,
+        Duration::from_secs(config.measurement.warmup_duration_secs),
+        config.measurement.iterations,
+    );
+
+    // Measurement
+    let (all_timings, cpu_samples) = measure_closure(
+        &mut func,
+        config.measurement.iterations,
+        config.measurement.samples,
+    );
+
+    let percentiles = calculate_percentiles(&all_timings);
+
+    BenchResult {
+        name: name.to_string(),
+        module: module.to_string(),
+        iterations: config.measurement.iterations,
+        samples: config.measurement.samples,
+        percentiles,
+        all_timings,
+        cpu_samples,
+        warmup_ms: Some(warmup_ms),
+        warmup_iterations: Some(warmup_iters),
+    }
+}
+
+/// Measure a benchmark with setup code that runs once before measurement.
+///
+/// This function is called by the generated benchmark wrapper for benchmarks
+/// with the `setup` attribute. Setup runs exactly once, then the benchmark
+/// function receives a reference to the setup data for each iteration.
+pub fn measure_with_setup<T, S, B>(
+    config: &BenchmarkConfig,
+    name: &str,
+    module: &str,
+    setup: S,
+    mut bench: B,
+) -> BenchResult
+where
+    S: FnOnce() -> T,
+    B: FnMut(&T),
+{
+    // Run setup ONCE before any measurement
+    let data = setup();
+
+    // Create closure that borrows the setup data
+    let mut func = || bench(&data);
+
+    // Warmup
+    let (warmup_ms, warmup_iters) = warmup_closure(
+        &mut func,
+        Duration::from_secs(config.measurement.warmup_duration_secs),
+        config.measurement.iterations,
+    );
+
+    // Measurement
+    let (all_timings, cpu_samples) = measure_closure(
+        &mut func,
+        config.measurement.iterations,
+        config.measurement.samples,
+    );
+
+    let percentiles = calculate_percentiles(&all_timings);
+
+    BenchResult {
+        name: name.to_string(),
+        module: module.to_string(),
+        iterations: config.measurement.iterations,
+        samples: config.measurement.samples,
+        percentiles,
+        all_timings,
+        cpu_samples,
+        warmup_ms: Some(warmup_ms),
+        warmup_iterations: Some(warmup_iters),
+    }
 }
 
 pub fn measure_with_warmup<F>(

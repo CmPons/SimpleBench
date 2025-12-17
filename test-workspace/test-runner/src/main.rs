@@ -1,37 +1,27 @@
-// Proper cargo binary runner for Phase 3 investigation
-// This helps us understand what cargo does differently from rustc
+// Test runner for manual verification of benchmark execution
+// Note: The main cargo-simplebench tool generates its own runner
 
-use game_math;
 use game_entities;
+use game_math;
 use game_physics;
-use simplebench_runtime;
+use simplebench_runtime::{config::BenchmarkConfig, run_and_stream_benchmarks};
 
 fn main() {
-    println!("=== SimpleBench Phase 3 Cargo Binary Test Runner ===\n");
+    println!("=== SimpleBench Manual Test Runner ===\n");
+
+    // Create a config with reasonable test defaults
+    let mut config = BenchmarkConfig::default();
+    config.measurement.samples = 10;
+    config.measurement.iterations = 100;
+    config.measurement.warmup_duration_secs = 1;
+
+    // Suppress unused warnings - these imports are needed to link the benchmarks
+    let _ = (game_math::Vec3::new(0.0, 0.0, 0.0), game_entities::Entity::new(0));
+    let _ = game_physics::AABB::new(0.0, 0.0, 0.0, 1.0, 1.0, 1.0);
 
     // Run all benchmarks collected via inventory
-    // Using fixed parameters: 100 iterations per sample, 100 samples
-    let results = simplebench_runtime::run_all_benchmarks(100, 100);
+    let results = run_and_stream_benchmarks(&config);
 
-    println!("Found {} benchmarks across all crates:\n", results.len());
-
-    for result in &results {
-        println!("Benchmark: {}::{}", result.module, result.name);
-        println!("  Iterations: {} × {} samples", result.iterations, result.samples);
-        println!("  p50: {:?}", result.percentiles.p50);
-        println!("  p90: {:?}", result.percentiles.p90);
-        println!("  p99: {:?}", result.percentiles.p99);
-        println!();
-    }
-
-    // Output as JSON for verification
-    match serde_json::to_string_pretty(&results) {
-        Ok(json) => {
-            println!("\n=== JSON Output ===");
-            println!("{}", json);
-        }
-        Err(e) => {
-            eprintln!("Error serializing results: {}", e);
-        }
-    }
+    println!("\n=== Summary ===");
+    println!("Completed {} benchmarks", results.len());
 }

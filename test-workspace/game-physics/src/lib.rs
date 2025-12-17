@@ -46,14 +46,26 @@ mod benchmarks {
     use super::*;
     use simplebench_macros::bench;
 
-    #[bench]
-    fn bench_aabb_intersection_checks() {
-        let mut boxes = Vec::new();
-        for i in 0..200 {
-            let offset = i as f32 * 0.5;
-            boxes.push(AABB::new(offset, offset, offset, offset + 2.0, offset + 2.0, offset + 2.0));
-        }
+    // Setup helper: creates a grid of AABBs for collision testing
+    fn create_aabb_grid(count: usize) -> Vec<AABB> {
+        (0..count)
+            .map(|i| {
+                let offset = i as f32 * 0.5;
+                AABB::new(
+                    offset,
+                    offset,
+                    offset,
+                    offset + 2.0,
+                    offset + 2.0,
+                    offset + 2.0,
+                )
+            })
+            .collect()
+    }
 
+    // Setup pattern: AABB creation happens once, collision checking is measured
+    #[bench(setup = || create_aabb_grid(200))]
+    fn bench_aabb_intersection_checks(boxes: &Vec<AABB>) {
         let mut collision_count = 0;
         for i in 0..boxes.len() {
             for j in (i + 1)..boxes.len() {
@@ -67,6 +79,7 @@ mod benchmarks {
         std::hint::black_box(collision_count);
     }
 
+    // Simple benchmark (no setup) - AABB creation is trivial, measuring containment
     #[bench]
     fn bench_point_containment_tests() {
         let aabb = AABB::new(-10.0, -10.0, -10.0, 10.0, 10.0, 10.0);
