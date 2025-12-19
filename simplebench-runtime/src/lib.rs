@@ -32,6 +32,7 @@ pub mod cpu_analysis;
 pub mod cpu_monitor;
 pub mod measurement;
 pub mod output;
+pub mod progress;
 pub mod statistics;
 
 pub use baseline::*;
@@ -41,6 +42,7 @@ pub use cpu_analysis::*;
 pub use cpu_monitor::*;
 pub use measurement::*;
 pub use output::*;
+pub use progress::*;
 pub use statistics::*;
 
 // Re-export inventory for use by the macro

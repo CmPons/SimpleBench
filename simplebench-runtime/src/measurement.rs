@@ -1,3 +1,4 @@
+use crate::progress::{emit_progress, ProgressMessage, ProgressPhase};
 use crate::{calculate_percentiles, config::BenchmarkConfig, BenchResult, CpuMonitor, CpuSnapshot};
 use std::time::{Duration, Instant};
 
@@ -36,13 +37,20 @@ fn get_pinned_core() -> usize {
 }
 
 /// Warmup using a closure (generic version for new measurement functions)
-fn warmup_closure<F>(func: &mut F, duration: Duration, iterations: usize) -> (u128, u64)
+fn warmup_closure<F>(
+    func: &mut F,
+    duration: Duration,
+    iterations: usize,
+    bench_name: &str,
+) -> (u128, u64)
 where
     F: FnMut(),
 {
     let start = Instant::now();
     let mut total_iterations = 0u64;
     let mut batch_size = 1u64;
+    let mut last_report = Instant::now();
+    let target_ms = duration.as_millis() as u64;
 
     while start.elapsed() < duration {
         for _ in 0..batch_size {
@@ -52,6 +60,18 @@ where
         }
         total_iterations += batch_size * (iterations as u64);
         batch_size *= 2;
+
+        // Emit progress every 100ms
+        if last_report.elapsed() >= Duration::from_millis(100) {
+            emit_progress(&ProgressMessage {
+                bench: bench_name,
+                phase: ProgressPhase::Warmup {
+                    elapsed_ms: start.elapsed().as_millis() as u64,
+                    target_ms,
+                },
+            });
+            last_report = Instant::now();
+        }
     }
 
     (start.elapsed().as_millis(), total_iterations)
@@ -62,6 +82,7 @@ fn measure_closure<F>(
     func: &mut F,
     iterations: usize,
     samples: usize,
+    bench_name: &str,
 ) -> (Vec<Duration>, Vec<CpuSnapshot>)
 where
     F: FnMut(),
@@ -73,7 +94,21 @@ where
     let cpu_core = get_pinned_core();
     let monitor = CpuMonitor::new(cpu_core);
 
-    for _ in 0..samples {
+    // Report progress every ~1% of samples (minimum every sample for small counts)
+    let report_interval = (samples / 100).max(1);
+
+    for sample_idx in 0..samples {
+        // Emit progress BEFORE timing (so we don't affect measurements)
+        if sample_idx % report_interval == 0 {
+            emit_progress(&ProgressMessage {
+                bench: bench_name,
+                phase: ProgressPhase::Samples {
+                    current: sample_idx as u32,
+                    total: samples as u32,
+                },
+            });
+        }
+
         // Read CPU frequency BEFORE measurement (while CPU is active)
         let freq_before = monitor.read_frequency();
 
@@ -100,6 +135,12 @@ where
         cpu_samples.push(snapshot);
     }
 
+    // Emit completion message
+    emit_progress(&ProgressMessage {
+        bench: bench_name,
+        phase: ProgressPhase::Complete,
+    });
+
     (all_timings, cpu_samples)
 }
 
@@ -121,6 +162,7 @@ where
         &mut func,
         Duration::from_secs(config.measurement.warmup_duration_secs),
         config.measurement.iterations,
+        name,
     );
 
     // Measurement
@@ -128,6 +170,7 @@ where
         &mut func,
         config.measurement.iterations,
         config.measurement.samples,
+        name,
     );
 
     let percentiles = calculate_percentiles(&all_timings);
@@ -172,6 +215,7 @@ where
         &mut func,
         Duration::from_secs(config.measurement.warmup_duration_secs),
         config.measurement.iterations,
+        name,
     );
 
     // Measurement
@@ -179,6 +223,7 @@ where
         &mut func,
         config.measurement.iterations,
         config.measurement.samples,
+        name,
     );
 
     let percentiles = calculate_percentiles(&all_timings);

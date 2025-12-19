@@ -2,5 +2,5 @@ target/
 **/target/
 .benches/
 **/.benches/
-.claude/
+#.claude/
 CLAUDE.md

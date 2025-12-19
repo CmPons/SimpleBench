@@ -2,6 +2,7 @@ mod analyze;
 mod compile;
 mod metadata;
 mod output;
+mod progress;
 mod rlib_selection;
 mod runner_gen;
 mod topology;
@@ -33,6 +34,7 @@ struct RunConfig {
     hazard_rate: Option<f64>,
     parallel: bool,
     jobs: Option<usize>,
+    quiet: bool,
 }
 
 /// SimpleBench - Simple microbenchmarking for Rust
@@ -100,6 +102,10 @@ enum Commands {
         /// Number of parallel jobs (cores to use). Implies --parallel.
         #[arg(long, short = 'j')]
         jobs: Option<usize>,
+
+        /// Suppress progress bars
+        #[arg(long, short = 'q')]
+        quiet: bool,
     },
 
     /// Clean existing benchmark results
@@ -164,6 +170,7 @@ fn main() -> Result<()> {
             hazard_rate,
             parallel,
             jobs,
+            quiet,
         }) => {
             // Explicit run command
             RunConfig {
@@ -179,6 +186,7 @@ fn main() -> Result<()> {
                 hazard_rate,
                 parallel: parallel || jobs.is_some(),
                 jobs,
+                quiet,
             }
         }
         None => {
@@ -196,6 +204,7 @@ fn main() -> Result<()> {
                 hazard_rate: None,
                 parallel: false,
                 jobs: None,
+                quiet: false,
             }
         }
     };
@@ -439,6 +448,10 @@ fn build_runner_env(workspace_root: &Path, run_config: &RunConfig) -> HashMap<St
         );
     }
 
+    if run_config.quiet {
+        env.insert("SIMPLEBENCH_QUIET".to_string(), "1".to_string());
+    }
+
     env
 }
 
@@ -497,6 +510,19 @@ fn run_benchmarks_parallel(
     )
 }
 
+/// Message types sent from benchmark runner threads
+enum RunnerMessage {
+    /// Progress update from stderr
+    Progress(progress::ProgressMessage),
+    /// Benchmark completed with result
+    Complete {
+        name: String,
+        core: usize,
+        result: Box<Result<BenchResult, String>>,
+        stderr_lines: Vec<String>,
+    },
+}
+
 /// Run benchmarks using specified cores, spawning one runner per benchmark
 /// Returns both results and comparisons (printed inline as each benchmark completes)
 fn run_benchmarks_with_cores(
@@ -507,88 +533,131 @@ fn run_benchmarks_with_cores(
     run_config: &RunConfig,
     config: &BenchmarkConfig,
 ) -> Result<(Vec<BenchResult>, Vec<ComparisonResult>)> {
+    use std::io::{BufRead, BufReader};
+    use std::sync::mpsc;
+
     let base_env = build_runner_env(workspace_root, run_config);
     let mut all_results = Vec::new();
     let mut all_comparisons = Vec::new();
 
-    // Initialize baseline manager
+    // Initialize baseline manager and progress display
     let baseline_manager = BaselineManager::new().ok();
+    let mut progress_display = progress::BenchmarkProgress::new(run_config.quiet);
 
     // Process benchmarks in batches (batch size = number of cores)
     for batch in benchmarks.chunks(cores.len()) {
+        let (tx, rx) = mpsc::channel::<RunnerMessage>();
+        let mut pending = batch.len();
+
         // Spawn all runners in this batch simultaneously
-        let children: Vec<_> = batch
-            .iter()
-            .enumerate()
-            .map(|(i, bench)| {
-                let core = cores[i];
-                let child = Command::new(runner)
-                    .env("SIMPLEBENCH_SINGLE_BENCH", "1")
-                    .env("SIMPLEBENCH_BENCH_FILTER", &bench.name)
-                    .env("SIMPLEBENCH_PIN_CORE", core.to_string())
-                    .envs(&base_env)
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped())
-                    .spawn()
-                    .expect("Failed to spawn runner");
-
-                (bench.name.clone(), core, child)
-            })
-            .collect();
-
-        // Spawn threads to wait for each child (avoids pipe deadlock)
-        // Each thread calls wait_with_output which properly drains stdout
-        use std::sync::mpsc;
-        let (tx, rx) = mpsc::channel();
-
-        for (name, core, child) in children {
+        for (i, bench) in batch.iter().enumerate() {
+            let core = cores[i];
+            let bench_name = bench.name.clone();
             let tx = tx.clone();
+
+            let mut child = Command::new(runner)
+                .env("SIMPLEBENCH_SINGLE_BENCH", "1")
+                .env("SIMPLEBENCH_BENCH_FILTER", &bench.name)
+                .env("SIMPLEBENCH_PIN_CORE", core.to_string())
+                .envs(&base_env)
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+                .expect("Failed to spawn runner");
+
+            let stderr = child.stderr.take().unwrap();
+            let stdout = child.stdout.take().unwrap();
+
+            // Thread to read stdout (runs concurrently to avoid pipe deadlock)
+            let stdout_handle = std::thread::spawn(move || {
+                let mut stdout_content = String::new();
+                let _ =
+                    std::io::Read::read_to_string(&mut BufReader::new(stdout), &mut stdout_content);
+                stdout_content
+            });
+
+            // Thread to stream stderr and parse progress
             std::thread::spawn(move || {
-                let output = child.wait_with_output();
-                let _ = tx.send((name, core, output));
+                let mut stderr_lines = Vec::new();
+                let stderr_reader = BufReader::new(stderr);
+
+                // Stream stderr lines for progress updates
+                for line in stderr_reader.lines().map_while(Result::ok) {
+                    if let Ok(wrapper) = serde_json::from_str::<progress::ProgressWrapper>(&line) {
+                        let _ = tx.send(RunnerMessage::Progress(wrapper.progress));
+                    } else {
+                        // Non-progress line (errors, warnings)
+                        stderr_lines.push(line);
+                    }
+                }
+
+                // Wait for stdout thread to complete
+                let stdout_content = stdout_handle.join().unwrap_or_default();
+
+                // Wait for child to complete
+                let status = child.wait();
+
+                let result = match status {
+                    Ok(s) if s.success() => serde_json::from_str::<BenchResult>(&stdout_content)
+                        .map_err(|e| {
+                            format!("Failed to parse result: {}\nstdout: {}", e, stdout_content)
+                        }),
+                    Ok(s) => Err(format!("Benchmark failed with status: {}", s)),
+                    Err(e) => Err(format!("Failed to wait for benchmark: {}", e)),
+                };
+
+                let _ = tx.send(RunnerMessage::Complete {
+                    name: bench_name,
+                    core,
+                    result: Box::new(result),
+                    stderr_lines,
+                });
             });
         }
         drop(tx); // Close sender so rx.iter() will terminate
 
-        // Collect results as they complete (in completion order!)
-        for (name, core, output_result) in rx {
-            let output = output_result.expect("Failed to get runner output");
+        // Process messages as they arrive
+        while pending > 0 {
+            match rx.recv() {
+                Ok(RunnerMessage::Progress(msg)) => {
+                    progress_display.update(&msg);
+                }
+                Ok(RunnerMessage::Complete {
+                    name,
+                    core,
+                    result,
+                    stderr_lines,
+                }) => {
+                    // Clear progress bar before printing result
+                    progress_display.finish();
 
-            if output.status.success() {
-                match serde_json::from_slice::<BenchResult>(&output.stdout) {
-                    Ok(result) => {
-                        // Print benchmark result
-                        output::print_benchmark_result(&result, core);
+                    match *result {
+                        Ok(bench_result) => {
+                            // Print benchmark result
+                            output::print_benchmark_result(&bench_result, core);
 
-                        // Process baseline comparison immediately
-                        let comparison =
-                            process_single_result_baseline(&result, &baseline_manager, config);
-                        all_comparisons.push(comparison);
+                            // Process baseline comparison immediately
+                            let comparison = process_single_result_baseline(
+                                &bench_result,
+                                &baseline_manager,
+                                config,
+                            );
+                            all_comparisons.push(comparison);
 
-                        println!(); // Blank line after each benchmark + comparison
-                        all_results.push(result);
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "{} Failed to parse result for {}: {}",
-                            "ERROR".red().bold(),
-                            name,
-                            e
-                        );
-                        let stdout = String::from_utf8_lossy(&output.stdout);
-                        if !stdout.is_empty() {
-                            eprintln!("stdout: {}", stdout);
+                            println!(); // Blank line after each benchmark + comparison
+                            all_results.push(bench_result);
+                        }
+                        Err(e) => {
+                            eprintln!("{} Failed benchmark {}: {}", "ERROR".red().bold(), name, e);
+                            // Print any non-progress stderr lines
+                            for line in stderr_lines {
+                                eprintln!("  {}", line);
+                            }
                         }
                     }
+                    pending -= 1;
                 }
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                eprintln!(
-                    "{} Benchmark {} failed: {}",
-                    "ERROR".red().bold(),
-                    name,
-                    stderr
-                );
+                Err(_) => break, // Channel closed
             }
         }
     }
