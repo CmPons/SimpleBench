@@ -1,3 +1,10 @@
+# [2.1.0](https://github.com/CmPons/SimpleBench/compare/v2.0.0...v2.1.0) (2025-12-19)
+
+
+### Features
+
+* add progress bars during benchmark execution ([560dbf4](https://github.com/CmPons/SimpleBench/commit/560dbf43eb00ddc9e2732125f6dc9e586599fd3c))
+
 # [2.0.0](https://github.com/CmPons/SimpleBench/compare/v1.0.6...v2.0.0) (2025-12-17)
 
 
