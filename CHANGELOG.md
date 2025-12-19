@@ -1,3 +1,10 @@
+## [2.1.1](https://github.com/CmPons/SimpleBench/compare/v2.1.0...v2.1.1) (2025-12-19)
+
+
+### Bug Fixes
+
+* ensure consistent rlib versions for benchmark discovery ([52680f2](https://github.com/CmPons/SimpleBench/commit/52680f2c151d9c17169844e3cbc7e6d8209aa5f1))
+
 # [2.1.0](https://github.com/CmPons/SimpleBench/compare/v2.0.0...v2.1.0) (2025-12-19)
 
 
