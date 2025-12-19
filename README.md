@@ -13,6 +13,7 @@ SimpleBench provides a simple `#[bench]` attribute and automatic workspace-wide 
 - **Workspace support** - Automatically discovers and runs benchmarks across all crates
 - **Regression detection** - Statistical comparison against baselines with configurable thresholds
 - **Low variance** - CPU pinning, warmup phases, and high sample counts for reliable measurements
+- **Progress feedback** - Real-time progress bars showing warmup and sampling phases
 - **CI-ready** - `--ci` flag returns non-zero exit code on regressions
 - **Historical tracking** - Stores run history for trend analysis
 
@@ -102,8 +103,10 @@ Options:
   --warmup-duration <S>   Warmup duration in seconds (default: 5)
   --threshold <P>         Regression threshold percentage (default: 5.0)
   --ci                    CI mode - exit with error on regression
-  --filter <PATTERN>      Run only benchmarks matching pattern
+  --bench <PATTERN>       Run only benchmarks matching pattern
   --parallel              Run benchmarks in parallel (faster, may increase variance)
+  -j, --jobs <N>          Number of parallel jobs (implies --parallel)
+  -q, --quiet             Suppress progress bars
 ```
 
 ### Environment Variables
@@ -115,6 +118,7 @@ All options can also be set via environment variables:
 - `SIMPLEBENCH_WARMUP_DURATION`
 - `SIMPLEBENCH_THRESHOLD`
 - `SIMPLEBENCH_BENCH_FILTER`
+- `SIMPLEBENCH_QUIET`
 
 ### Configuration File
 
