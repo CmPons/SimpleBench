@@ -14,12 +14,20 @@ use std::process::Command;
 /// 3. Manually invoke rustc with all --extern flags to produce rlibs with --cfg test
 ///
 /// This enables idiomatic `[dev-dependencies]` usage for simplebench-* crates.
+///
+/// IMPORTANT: Tracks the simplebench_runtime version from the first benchmark crate and ensures
+/// all subsequent crates use the same version. This is critical because `inventory` uses static
+/// globals with compilation-specific hashes - all crates must link against the exact same version.
 pub fn build_and_select_rlibs(
     workspace_root: &Path,
     benchmark_crates: &[String],
     target_dir: &Path,
 ) -> Result<HashMap<String, PathBuf>> {
     let mut all_rlibs: HashMap<String, PathBuf> = HashMap::new();
+    // Track canonical versions of critical dependencies to ensure consistency across all benchmark crates.
+    // The inventory crate uses static REGISTRY globals with compilation-specific hashes, so all
+    // crates must link against the exact same versions of simplebench_runtime and inventory.
+    let mut canonical_critical_deps: HashMap<String, PathBuf> = HashMap::new();
 
     for crate_name in benchmark_crates {
         println!("     Building {} with dev-dependencies", crate_name);
@@ -49,13 +57,40 @@ pub fn build_and_select_rlibs(
         }
 
         // Step 2: Parse JSON to collect rlib paths
-        let crate_rlibs = parse_cargo_json(&output.stdout, crate_name)?;
+        let (crate_rlibs, crate_critical_deps) = parse_cargo_json(&output.stdout, crate_name)?;
+
+        // Track/verify consistent critical dependency versions across all benchmark crates
+        for (dep_name, dep_path) in &crate_critical_deps {
+            match canonical_critical_deps.get(dep_name) {
+                None => {
+                    // First crate sets the canonical version
+                    canonical_critical_deps.insert(dep_name.clone(), dep_path.clone());
+                }
+                Some(canonical) if canonical != dep_path => {
+                    // Different version detected - warn but use canonical for consistency
+                    eprintln!(
+                        "     Warning: Different {} versions detected for {}",
+                        dep_name, crate_name
+                    );
+                    eprintln!("       Expected: {}", canonical.display());
+                    eprintln!("       Found:    {}", dep_path.display());
+                    eprintln!("       Using canonical version for consistency");
+                }
+                _ => {} // Same version, all good
+            }
+        }
 
         // Step 3: Get source path and manifest dir for this crate
         let (src_path, manifest_dir) = get_crate_paths(workspace_root, crate_name)?;
 
         // Step 4: Manually invoke rustc to produce rlib with --cfg test
-        let extern_args = build_extern_args(&crate_rlibs);
+        // CRITICAL: Use canonical versions of critical deps for this crate's compilation
+        // to ensure all benchmark crates link against the same inventory/simplebench_runtime
+        let mut rlibs_for_compile = crate_rlibs.clone();
+        for (dep_name, dep_path) in &canonical_critical_deps {
+            rlibs_for_compile.insert(dep_name.clone(), dep_path.clone());
+        }
+        let extern_args = build_extern_args(&rlibs_for_compile);
         let normalized_name = crate_name.replace('-', "_");
 
         let out_dir = target_dir.join("release").join("deps");
@@ -88,9 +123,31 @@ pub fn build_and_select_rlibs(
         // Find the rlib we just created
         let rlib_path = find_crate_rlib(&out_dir, &normalized_name)?;
 
-        // Merge into all_rlibs (crate_rlibs first, then our custom rlib overwrites)
-        all_rlibs.extend(crate_rlibs);
+        // Merge crate_rlibs into all_rlibs, but DON'T overwrite:
+        // - previously manually-built benchmark crates (they have --cfg test enabled)
+        // - canonical critical deps (simplebench_runtime, inventory)
+        for (name, path) in crate_rlibs {
+            // Skip if this is a benchmark crate we've already manually built
+            let is_already_built_benchmark = benchmark_crates
+                .iter()
+                .any(|bc| bc.replace('-', "_") == name && all_rlibs.contains_key(&name));
+
+            // Skip if this is a critical dep (we'll add canonical versions at the end)
+            let is_critical_dep = CRITICAL_DEPS.contains(&name.as_str());
+
+            if !is_already_built_benchmark && !is_critical_dep {
+                all_rlibs.insert(name, path);
+            }
+        }
+
+        // Insert our manually-built benchmark crate rlib
         all_rlibs.insert(normalized_name, rlib_path);
+    }
+
+    // Ensure all canonical critical dependencies are in the final map
+    // This overrides any versions that may have been inserted from later crate builds
+    for (dep_name, dep_path) in &canonical_critical_deps {
+        all_rlibs.insert(dep_name.clone(), dep_path.clone());
     }
 
     Ok(all_rlibs)
@@ -126,9 +183,22 @@ impl CargoProfile {
     }
 }
 
+/// Critical dependencies that must be consistent across all benchmark crates.
+/// The inventory crate uses static REGISTRY globals with compilation-specific hashes,
+/// so all crates must link against the exact same versions of these dependencies.
+const CRITICAL_DEPS: &[&str] = &["simplebench_runtime", "inventory"];
+
 /// Parse cargo --message-format=json output to collect rlib/so paths
-fn parse_cargo_json(stdout: &[u8], exclude_crate: &str) -> Result<HashMap<String, PathBuf>> {
+///
+/// Returns a tuple of (all_rlibs, critical_deps) where:
+/// - all_rlibs: HashMap of crate_name -> rlib_path for all dependencies
+/// - critical_deps: HashMap of critical dep names -> paths for version tracking
+fn parse_cargo_json(
+    stdout: &[u8],
+    exclude_crate: &str,
+) -> Result<(HashMap<String, PathBuf>, HashMap<String, PathBuf>)> {
     let mut rlibs: HashMap<String, PathBuf> = HashMap::new();
+    let mut critical_deps: HashMap<String, PathBuf> = HashMap::new();
     let exclude_normalized = exclude_crate.replace('-', "_");
 
     for line in stdout.lines() {
@@ -176,13 +246,17 @@ fn parse_cargo_json(stdout: &[u8], exclude_crate: &str) -> Result<HashMap<String
         for filename in &artifact.filenames {
             let ext = filename.extension().and_then(|e| e.to_str());
             if ext == Some("rlib") || ext == Some("so") {
+                // Track critical dependencies separately for version consistency
+                if CRITICAL_DEPS.contains(&target_name.as_str()) {
+                    critical_deps.insert(target_name.clone(), filename.clone());
+                }
                 rlibs.insert(target_name.clone(), filename.clone());
                 break;
             }
         }
     }
 
-    Ok(rlibs)
+    Ok((rlibs, critical_deps))
 }
 
 /// Build --extern arguments from collected rlibs
