@@ -88,7 +88,7 @@ pub fn bench(args: TokenStream, input: TokenStream) -> TokenStream {
     }
 
     // Validate attribute/parameter combinations
-    if setup_each_expr.is_some() {
+    if let Some(setup_each) = setup_each_expr {
         // setup_each requires a parameter
         if !has_params {
             return syn::Error::new_spanned(
@@ -98,7 +98,7 @@ pub fn bench(args: TokenStream, input: TokenStream) -> TokenStream {
             .to_compile_error()
             .into();
         }
-        return generate_with_setup_each(fn_name, &fn_name_str, &input_fn, setup_each_expr.unwrap());
+        return generate_with_setup_each(fn_name, &fn_name_str, &input_fn, setup_each);
     }
 
     if let Some(setup) = setup_expr {
@@ -136,11 +136,9 @@ pub fn bench(args: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Check if the first parameter of the function is a reference type
 fn is_reference_param(input_fn: &ItemFn) -> bool {
-    if let Some(first_param) = input_fn.sig.inputs.first() {
-        if let syn::FnArg::Typed(pat_type) = first_param {
-            if let syn::Type::Reference(_) = &*pat_type.ty {
-                return true;
-            }
+    if let Some(syn::FnArg::Typed(pat_type)) = input_fn.sig.inputs.first() {
+        if let syn::Type::Reference(_) = &*pat_type.ty {
+            return true;
         }
     }
     false
@@ -290,6 +288,5 @@ mod tests {
         // Unit tests for proc macros are limited
         // The real tests are in the integration tests
         // This just verifies the module compiles
-        assert!(true);
     }
 }

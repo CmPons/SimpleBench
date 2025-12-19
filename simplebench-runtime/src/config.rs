@@ -201,7 +201,7 @@ mod tests {
         assert_eq!(config.measurement.samples, 1000);
         assert_eq!(config.measurement.warmup_duration_secs, 3);
         assert_eq!(config.comparison.threshold, 5.0);
-        assert_eq!(config.comparison.ci_mode, false);
+        assert!(!config.comparison.ci_mode);
     }
 
     #[test]
@@ -228,7 +228,7 @@ mod tests {
 
         assert_eq!(config.measurement.samples, 300);
         assert_eq!(config.measurement.warmup_duration_secs, 5);
-        assert_eq!(config.comparison.ci_mode, true);
+        assert!(config.comparison.ci_mode);
         assert_eq!(config.comparison.threshold, 10.0);
 
         // Clean up
@@ -259,6 +259,6 @@ mod tests {
 
         // Default values for unspecified fields
         assert_eq!(config.measurement.warmup_duration_secs, 3);
-        assert_eq!(config.comparison.ci_mode, false);
+        assert!(!config.comparison.ci_mode);
     }
 }

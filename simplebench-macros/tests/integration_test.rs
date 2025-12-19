@@ -30,7 +30,7 @@ fn create_test_data() -> Vec<i32> {
 }
 
 #[bench(setup = create_test_data)]
-fn bench_with_setup(data: &Vec<i32>) {
+fn bench_with_setup(data: &[i32]) {
     let _sum: i32 = data.iter().sum();
 }
 
@@ -42,7 +42,7 @@ fn bench_sort_owning(mut data: Vec<i32>) {
 
 // Test setup_each with reference (fresh data each sample, borrowed)
 #[bench(setup_each = || vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10])]
-fn bench_sum_ref(data: &Vec<i32>) {
+fn bench_sum_ref(data: &[i32]) {
     let _sum: i32 = data.iter().sum();
 }
 

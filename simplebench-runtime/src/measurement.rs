@@ -130,8 +130,7 @@ where
     );
 
     // Measurement
-    let (all_timings, cpu_samples) =
-        measure_closure(&mut func, config.measurement.samples, name);
+    let (all_timings, cpu_samples) = measure_closure(&mut func, config.measurement.samples, name);
 
     let percentiles = calculate_percentiles(&all_timings);
 
@@ -177,8 +176,7 @@ where
     );
 
     // Measurement
-    let (all_timings, cpu_samples) =
-        measure_closure(&mut func, config.measurement.samples, name);
+    let (all_timings, cpu_samples) = measure_closure(&mut func, config.measurement.samples, name);
 
     let percentiles = calculate_percentiles(&all_timings);
 
