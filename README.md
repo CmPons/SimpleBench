@@ -118,7 +118,7 @@ All options can also be set via environment variables:
 
 ### Configuration File
 
-Create `.simplebench.toml` in your project root:
+Create `simplebench.toml` in your project root:
 
 ```toml
 [measurement]
