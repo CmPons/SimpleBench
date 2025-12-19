@@ -9,19 +9,12 @@ pub struct MeasurementConfig {
     #[serde(default = "default_samples")]
     pub samples: usize,
 
-    /// Number of iterations per sample
-    #[serde(default = "default_iterations")]
-    pub iterations: usize,
-
     /// Warmup duration in seconds (default: 3 seconds, matching Criterion)
     #[serde(default = "default_warmup_duration")]
     pub warmup_duration_secs: u64,
 }
 
 fn default_samples() -> usize {
-    1000
-}
-fn default_iterations() -> usize {
     1000
 }
 fn default_warmup_duration() -> u64 {
@@ -32,7 +25,6 @@ impl Default for MeasurementConfig {
     fn default() -> Self {
         Self {
             samples: default_samples(),
-            iterations: default_iterations(),
             warmup_duration_secs: default_warmup_duration(),
         }
     }
@@ -146,12 +138,6 @@ impl BenchmarkConfig {
             }
         }
 
-        if let Ok(iterations) = std::env::var("SIMPLEBENCH_ITERATIONS") {
-            if let Ok(val) = iterations.parse() {
-                self.measurement.iterations = val;
-            }
-        }
-
         if let Ok(warmup) = std::env::var("SIMPLEBENCH_WARMUP_DURATION") {
             if let Ok(val) = warmup.parse() {
                 self.measurement.warmup_duration_secs = val;
@@ -213,7 +199,6 @@ mod tests {
     fn test_default_config() {
         let config = BenchmarkConfig::default();
         assert_eq!(config.measurement.samples, 1000);
-        assert_eq!(config.measurement.iterations, 1000);
         assert_eq!(config.measurement.warmup_duration_secs, 3);
         assert_eq!(config.comparison.threshold, 5.0);
         assert_eq!(config.comparison.ci_mode, false);
@@ -228,14 +213,12 @@ mod tests {
         let loaded = BenchmarkConfig::from_file(temp_file.path()).unwrap();
 
         assert_eq!(loaded.measurement.samples, 1000);
-        assert_eq!(loaded.measurement.iterations, 1000);
         assert_eq!(loaded.measurement.warmup_duration_secs, 3);
     }
 
     #[test]
     fn test_env_overrides() {
         env::set_var("SIMPLEBENCH_SAMPLES", "300");
-        env::set_var("SIMPLEBENCH_ITERATIONS", "1000");
         env::set_var("SIMPLEBENCH_WARMUP_DURATION", "5");
         env::set_var("SIMPLEBENCH_CI", "1");
         env::set_var("SIMPLEBENCH_THRESHOLD", "10.0");
@@ -244,14 +227,12 @@ mod tests {
         config.apply_env_overrides();
 
         assert_eq!(config.measurement.samples, 300);
-        assert_eq!(config.measurement.iterations, 1000);
         assert_eq!(config.measurement.warmup_duration_secs, 5);
         assert_eq!(config.comparison.ci_mode, true);
         assert_eq!(config.comparison.threshold, 10.0);
 
         // Clean up
         env::remove_var("SIMPLEBENCH_SAMPLES");
-        env::remove_var("SIMPLEBENCH_ITERATIONS");
         env::remove_var("SIMPLEBENCH_WARMUP_DURATION");
         env::remove_var("SIMPLEBENCH_CI");
         env::remove_var("SIMPLEBENCH_THRESHOLD");
@@ -277,7 +258,6 @@ mod tests {
         assert_eq!(config.comparison.threshold, 7.5);
 
         // Default values for unspecified fields
-        assert_eq!(config.measurement.iterations, 1000);
         assert_eq!(config.measurement.warmup_duration_secs, 3);
         assert_eq!(config.comparison.ci_mode, false);
     }

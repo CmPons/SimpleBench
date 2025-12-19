@@ -14,9 +14,22 @@
 //! ```rust,ignore
 //! use simplebench_macros::bench;
 //!
+//! // Simple benchmark - measures single function calls
 //! #[bench]
 //! fn my_benchmark() {
 //!     // code to benchmark
+//! }
+//!
+//! // Setup runs once, benchmark receives reference
+//! #[bench(setup = create_data)]
+//! fn benchmark_with_setup(data: &Data) {
+//!     process(data);
+//! }
+//!
+//! // Setup runs before each sample - for mutations/consumption
+//! #[bench(setup_each = || vec![3, 1, 4, 1, 5])]
+//! fn bench_sort(mut data: Vec<i32>) {
+//!     data.sort();
 //! }
 //! ```
 //!
@@ -97,8 +110,6 @@ pub struct BenchResult {
     pub name: String,
     /// Module path where the benchmark is defined
     pub module: String,
-    /// Number of iterations per sample
-    pub iterations: usize,
     /// Number of samples collected
     pub samples: usize,
     /// Percentile statistics computed from all timings
@@ -357,12 +368,10 @@ pub fn run_and_stream_benchmarks(config: &crate::config::BenchmarkConfig) -> Vec
     };
 
     println!(
-        "{} {} {} {} {}",
+        "{} {} {}",
         "Running benchmarks with".green().bold(),
         config.measurement.samples,
-        "samples ×".green().bold(),
-        config.measurement.iterations,
-        "iterations".green().bold()
+        "samples".green().bold()
     );
 
     if let Some(ref filter) = bench_filter {

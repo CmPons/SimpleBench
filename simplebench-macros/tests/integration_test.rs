@@ -24,6 +24,28 @@ fn bench_string_concatenation() {
     }
 }
 
+// Test setup (runs once)
+fn create_test_data() -> Vec<i32> {
+    vec![1, 2, 3, 4, 5]
+}
+
+#[bench(setup = create_test_data)]
+fn bench_with_setup(data: &Vec<i32>) {
+    let _sum: i32 = data.iter().sum();
+}
+
+// Test setup_each with ownership (data is consumed each sample)
+#[bench(setup_each = || vec![5, 3, 8, 1, 9, 4, 7, 2, 6])]
+fn bench_sort_owning(mut data: Vec<i32>) {
+    data.sort();
+}
+
+// Test setup_each with reference (fresh data each sample, borrowed)
+#[bench(setup_each = || vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10])]
+fn bench_sum_ref(data: &Vec<i32>) {
+    let _sum: i32 = data.iter().sum();
+}
+
 #[test]
 fn test_benchmarks_are_registered() {
     // Collect all registered benchmarks via inventory
@@ -31,10 +53,10 @@ fn test_benchmarks_are_registered() {
         .map(|b| b.name)
         .collect();
 
-    // Should have at least our 4 test benchmarks
+    // Should have at least our 7 test benchmarks (4 simple + 1 setup + 2 setup_each)
     assert!(
-        bench_names.len() >= 4,
-        "Expected at least 4 benchmarks, got {}",
+        bench_names.len() >= 7,
+        "Expected at least 7 benchmarks, got {}",
         bench_names.len()
     );
 
@@ -54,6 +76,18 @@ fn test_benchmarks_are_registered() {
     assert!(
         bench_names.contains(&"bench_string_concatenation"),
         "bench_string_concatenation not found"
+    );
+    assert!(
+        bench_names.contains(&"bench_with_setup"),
+        "bench_with_setup not found"
+    );
+    assert!(
+        bench_names.contains(&"bench_sort_owning"),
+        "bench_sort_owning not found"
+    );
+    assert!(
+        bench_names.contains(&"bench_sum_ref"),
+        "bench_sum_ref not found"
     );
 }
 
@@ -80,7 +114,6 @@ fn test_json_serialization() {
     let result = BenchResult {
         name: "test_bench".to_string(),
         module: "test_module".to_string(),
-        iterations: 100,
         samples: 10,
         percentiles: Percentiles {
             p50: Duration::from_millis(5),
@@ -104,6 +137,5 @@ fn test_json_serialization() {
 
     assert_eq!(result.name, loaded.name);
     assert_eq!(result.module, loaded.module);
-    assert_eq!(result.iterations, loaded.iterations);
     assert_eq!(result.samples, loaded.samples);
 }

@@ -12,7 +12,6 @@ fn main() {
     // Create a config with reasonable test defaults
     let mut config = BenchmarkConfig::default();
     config.measurement.samples = 10;
-    config.measurement.iterations = 100;
     config.measurement.warmup_duration_secs = 1;
 
     // Suppress unused warnings - these imports are needed to link the benchmarks

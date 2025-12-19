@@ -3,8 +3,8 @@
 
 // Import all workspace crates to trigger inventory collection
 // Using `use` statements to force the linker to include inventory submissions
-use game_math;
 use game_entities;
+use game_math;
 use game_physics;
 
 // Import simplebench runtime
@@ -13,15 +13,15 @@ use simplebench_runtime;
 fn main() {
     println!("=== SimpleBench Phase 3 Manual Test Runner ===\n");
 
-    // Run all benchmarks collected via inventory
-    // Using fixed parameters: 100 iterations per sample, 100 samples
-    let results = simplebench_runtime::run_all_benchmarks(100, 100);
+    // Load config and run all benchmarks
+    let config = simplebench_runtime::config::BenchmarkConfig::default();
+    let results = simplebench_runtime::run_and_stream_benchmarks(&config);
 
     println!("Found {} benchmarks across all crates:\n", results.len());
 
     for result in &results {
         println!("Benchmark: {}::{}", result.module, result.name);
-        println!("  Iterations: {} × {} samples", result.iterations, result.samples);
+        println!("  Samples: {}", result.samples);
         println!("  p50: {:?}", result.percentiles.p50);
         println!("  p90: {:?}", result.percentiles.p90);
         println!("  p99: {:?}", result.percentiles.p99);

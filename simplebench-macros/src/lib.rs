@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::punctuated::Punctuated;
 use syn::Token;
-use syn::{parse_macro_input, Expr, ExprLit, ItemFn, Lit, Meta};
+use syn::{parse_macro_input, Expr, ItemFn, Meta};
 
 /// The `#[bench]` attribute macro for registering benchmark functions.
 ///
@@ -15,29 +15,39 @@ use syn::{parse_macro_input, Expr, ExprLit, ItemFn, Lit, Meta};
 /// }
 /// ```
 ///
-/// The entire function body is measured on each iteration. Use this for benchmarks
+/// The entire function body is measured on each sample. Use this for benchmarks
 /// where setup is negligible or part of what you want to measure.
 ///
-/// # With Setup
+/// # With Setup (runs once)
 ///
 /// ```rust,ignore
 /// #[bench(setup = create_data)]
 /// fn benchmark_with_setup(data: &Data) {
-///     operation(data);  // Only this runs per iteration
+///     operation(data);  // Only this runs per sample
 /// }
 /// ```
 ///
 /// The setup function/closure runs once before measurement begins. The benchmark
-/// function receives a reference to the setup data for each iteration.
+/// function receives a reference to the setup data for each sample.
 ///
-/// # Inline Setup Closure
+/// # With Setup Each (runs before every sample)
 ///
 /// ```rust,ignore
-/// #[bench(setup = || random_vectors(1000))]
-/// fn benchmark_inline(data: &Vec<Vec3>) {
-///     for v in data { v.normalize(); }
+/// // Owning: benchmark takes ownership (for operations that consume/mutate data)
+/// #[bench(setup_each = || vec![3, 1, 4, 1, 5, 9, 2, 6, 5, 3])]
+/// fn bench_sort(mut data: Vec<i32>) {
+///     data.sort();
+/// }
+///
+/// // Borrowing: benchmark takes reference (for fresh read-only data each sample)
+/// #[bench(setup_each = || random_vectors(1000))]
+/// fn bench_normalize(vectors: &Vec<Vec3>) {
+///     for v in vectors { v.normalize(); }
 /// }
 /// ```
+///
+/// The setup expression runs before every sample. The benchmark function can take
+/// either `T` (ownership) or `&T` (reference) depending on whether it consumes the data.
 #[proc_macro_attribute]
 pub fn bench(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args with Punctuated::<Meta, Token![,]>::parse_terminated);
@@ -49,8 +59,7 @@ pub fn bench(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Parse optional parameters from attributes
     let mut setup_expr: Option<Expr> = None;
-    let mut _iterations = 1000usize;
-    let mut _samples = 100usize;
+    let mut setup_each_expr: Option<Expr> = None;
 
     for arg in args {
         if let Meta::NameValue(nv) = arg {
@@ -60,40 +69,41 @@ pub fn bench(args: TokenStream, input: TokenStream) -> TokenStream {
                 Some("setup") => {
                     setup_expr = Some(nv.value);
                 }
-                Some("iterations") => {
-                    if let Expr::Lit(ExprLit {
-                        lit: Lit::Int(lit_int),
-                        ..
-                    }) = &nv.value
-                    {
-                        _iterations = lit_int.base10_parse().unwrap();
-                    }
-                }
-                Some("samples") => {
-                    if let Expr::Lit(ExprLit {
-                        lit: Lit::Int(lit_int),
-                        ..
-                    }) = &nv.value
-                    {
-                        _samples = lit_int.base10_parse().unwrap();
-                    }
+                Some("setup_each") => {
+                    setup_each_expr = Some(nv.value);
                 }
                 _ => {}
             }
         }
     }
 
+    // Validate: cannot use both setup and setup_each
+    if setup_expr.is_some() && setup_each_expr.is_some() {
+        return syn::Error::new_spanned(
+            &input_fn.sig,
+            "cannot use both `setup` and `setup_each` - choose one",
+        )
+        .to_compile_error()
+        .into();
+    }
+
     // Validate attribute/parameter combinations
-    match (setup_expr.is_some(), has_params) {
-        (false, true) => {
+    if setup_each_expr.is_some() {
+        // setup_each requires a parameter
+        if !has_params {
             return syn::Error::new_spanned(
                 &input_fn.sig,
-                "benchmark with parameters requires #[bench(setup = ...)]",
+                "#[bench(setup_each = ...)] requires function to accept T or &T parameter",
             )
             .to_compile_error()
             .into();
         }
-        (true, false) => {
+        return generate_with_setup_each(fn_name, &fn_name_str, &input_fn, setup_each_expr.unwrap());
+    }
+
+    if let Some(setup) = setup_expr {
+        // setup (runs once) requires &T parameter
+        if !has_params {
             return syn::Error::new_spanned(
                 &input_fn.sig,
                 "#[bench(setup = ...)] requires function to accept &T parameter",
@@ -101,14 +111,39 @@ pub fn bench(args: TokenStream, input: TokenStream) -> TokenStream {
             .to_compile_error()
             .into();
         }
-        _ => {}
-    }
-
-    if let Some(setup) = setup_expr {
+        if !is_reference_param(&input_fn) {
+            return syn::Error::new_spanned(
+                &input_fn.sig,
+                "#[bench(setup = ...)] requires &T parameter; for T (ownership), use setup_each",
+            )
+            .to_compile_error()
+            .into();
+        }
         generate_with_setup(fn_name, &fn_name_str, &input_fn, setup)
     } else {
+        // No setup - benchmark must not have parameters
+        if has_params {
+            return syn::Error::new_spanned(
+                &input_fn.sig,
+                "benchmark with parameters requires #[bench(setup = ...)] or #[bench(setup_each = ...)]",
+            )
+            .to_compile_error()
+            .into();
+        }
         generate_simple(fn_name, &fn_name_str, &input_fn)
     }
+}
+
+/// Check if the first parameter of the function is a reference type
+fn is_reference_param(input_fn: &ItemFn) -> bool {
+    if let Some(first_param) = input_fn.sig.inputs.first() {
+        if let syn::FnArg::Typed(pat_type) = first_param {
+            if let syn::Type::Reference(_) = &*pat_type.ty {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Generate code for a simple benchmark (no setup).
@@ -190,6 +225,64 @@ fn generate_with_setup(
     TokenStream::from(expanded)
 }
 
+/// Generate code for a benchmark with setup_each (runs before every sample).
+///
+/// Detects whether the benchmark takes `T` (ownership) or `&T` (reference)
+/// and generates the appropriate measurement function call.
+fn generate_with_setup_each(
+    fn_name: &syn::Ident,
+    fn_name_str: &str,
+    input_fn: &ItemFn,
+    setup_expr: Expr,
+) -> TokenStream {
+    let run_fn_name = format_ident!("__simplebench_run_{}", fn_name);
+    let is_ref = is_reference_param(input_fn);
+
+    let measure_call = if is_ref {
+        // Benchmark takes &T - use borrowing version
+        quote! {
+            ::simplebench_runtime::measure_with_setup_each_ref(
+                config,
+                #fn_name_str,
+                module_path!(),
+                || (#setup_expr)(),
+                |data| #fn_name(data),
+            )
+        }
+    } else {
+        // Benchmark takes T - use owning version
+        quote! {
+            ::simplebench_runtime::measure_with_setup_each(
+                config,
+                #fn_name_str,
+                module_path!(),
+                || (#setup_expr)(),
+                |data| #fn_name(data),
+            )
+        }
+    };
+
+    let expanded = quote! {
+        #input_fn
+
+        fn #run_fn_name(
+            config: &::simplebench_runtime::config::BenchmarkConfig
+        ) -> ::simplebench_runtime::BenchResult {
+            #measure_call
+        }
+
+        ::simplebench_runtime::inventory::submit! {
+            ::simplebench_runtime::SimpleBench {
+                name: #fn_name_str,
+                module: module_path!(),
+                run: #run_fn_name,
+            }
+        }
+    };
+
+    TokenStream::from(expanded)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -198,14 +291,5 @@ mod tests {
         // The real tests are in the integration tests
         // This just verifies the module compiles
         assert!(true);
-    }
-
-    #[test]
-    fn test_default_params() {
-        // Default iterations should be 1000
-        // Default samples should be 100
-        // Verified in integration tests
-        assert_eq!(1000, 1000);
-        assert_eq!(100, 100);
     }
 }

@@ -31,8 +31,8 @@ In your crate's `Cargo.toml`:
 
 ```toml
 [dev-dependencies]
-simplebench-runtime = "2.0.0"
-simplebench-macros = "2.0.0"
+simplebench-runtime = "2.1"
+simplebench-macros = "2.1"
 ```
 
 ### Write a Benchmark
@@ -53,14 +53,14 @@ mod benchmarks {
 
 ### Benchmarks with Setup
 
-For benchmarks where setup is expensive, use the `setup` attribute to run setup code **once** instead of on every iteration:
+For benchmarks where setup is expensive, use the `setup` attribute to run setup code **once** before measurement begins:
 
 ```rust
 #[cfg(test)]
 mod benchmarks {
     use simplebench_macros::bench;
 
-    // Setup runs once, only the operation is measured
+    // Setup runs once, benchmark receives reference to data
     #[bench(setup = || generate_test_data(1000))]
     fn benchmark_with_setup(data: &Vec<u64>) {
         let sum: u64 = data.iter().sum();
@@ -82,7 +82,41 @@ mod benchmarks {
 }
 ```
 
-**Why this matters:** Without setup separation, a benchmark with 1000 samples × 1000 iterations runs setup code **1,000,000 times**. With `setup`, it runs exactly **once**.
+### Per-Sample Setup (`setup_each`)
+
+For benchmarks that need fresh data for each sample (e.g., sorting, consuming iterators), use `setup_each`. The setup runs before **every** sample:
+
+```rust
+#[cfg(test)]
+mod benchmarks {
+    use simplebench_macros::bench;
+
+    // Owning: benchmark takes ownership (for mutations/consumption)
+    #[bench(setup_each = || vec![5, 3, 8, 1, 9, 4, 7, 2, 6])]
+    fn bench_sort(mut data: Vec<i32>) {
+        data.sort();  // Mutates the data
+    }
+
+    // Owning: consuming an iterator
+    #[bench(setup_each = || (0..1000).collect::<Vec<_>>())]
+    fn bench_consume_iter(data: Vec<i32>) {
+        let _sum: i32 = data.into_iter().sum();  // Consumes data
+    }
+
+    // Borrowing: fresh data each sample, but only reading
+    #[bench(setup_each = || random_vectors(1000))]
+    fn bench_normalize(vectors: &Vec<Vec3>) {
+        for v in vectors {
+            let _ = v.normalize();
+        }
+    }
+}
+```
+
+**When to use which:**
+- `setup` - Setup is expensive and data is read-only (setup runs once)
+- `setup_each` with `T` - Benchmark mutates or consumes the data
+- `setup_each` with `&T` - Need fresh random/unique data each sample
 
 ### Run Benchmarks
 
@@ -99,8 +133,7 @@ cargo simplebench [OPTIONS]
 
 Options:
   --samples <N>           Number of samples per benchmark (default: 1000)
-  --iterations <N>        Iterations per sample (default: 1000)
-  --warmup-duration <S>   Warmup duration in seconds (default: 5)
+  --warmup-duration <S>   Warmup duration in seconds (default: 3)
   --threshold <P>         Regression threshold percentage (default: 5.0)
   --ci                    CI mode - exit with error on regression
   --bench <PATTERN>       Run only benchmarks matching pattern
@@ -114,7 +147,6 @@ Options:
 All options can also be set via environment variables:
 
 - `SIMPLEBENCH_SAMPLES`
-- `SIMPLEBENCH_ITERATIONS`
 - `SIMPLEBENCH_WARMUP_DURATION`
 - `SIMPLEBENCH_THRESHOLD`
 - `SIMPLEBENCH_BENCH_FILTER`
@@ -127,8 +159,7 @@ Create `simplebench.toml` in your project root:
 ```toml
 [measurement]
 samples = 1000
-iterations = 1000
-warmup_duration_secs = 5
+warmup_duration_secs = 3
 
 [comparison]
 threshold = 5.0
@@ -167,6 +198,8 @@ cargo simplebench analyze <benchmark_name> --last 10
 ## How It Works
 
 SimpleBench uses the `inventory` crate for compile-time benchmark registration. The `#[bench]` macro expands to register each benchmark function, and `cargo simplebench` builds a unified runner that links all workspace crates and executes discovered benchmarks.
+
+Each sample measures exactly one function call, giving you per-call timing data with full variance information.
 
 Benchmarks are compiled with `#[cfg(test)]`, so they're excluded from production builds.
 

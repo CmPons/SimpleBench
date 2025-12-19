@@ -24,7 +24,6 @@ use std::process::{Command, Stdio};
 struct RunConfig {
     bench_filter: Option<String>,
     samples: Option<usize>,
-    iterations: Option<usize>,
     warmup_duration: Option<u64>,
     threshold: Option<f64>,
     ci: bool,
@@ -62,10 +61,6 @@ enum Commands {
         /// Number of timing samples per benchmark
         #[arg(long)]
         samples: Option<usize>,
-
-        /// Number of iterations per sample
-        #[arg(long)]
-        iterations: Option<usize>,
 
         /// Warmup duration in seconds (default: 3)
         #[arg(long)]
@@ -160,7 +155,6 @@ fn main() -> Result<()> {
         Some(Commands::Run {
             bench,
             samples,
-            iterations,
             warmup_duration,
             threshold,
             ci,
@@ -176,7 +170,6 @@ fn main() -> Result<()> {
             RunConfig {
                 bench_filter: bench,
                 samples,
-                iterations,
                 warmup_duration,
                 threshold,
                 ci,
@@ -194,7 +187,6 @@ fn main() -> Result<()> {
             RunConfig {
                 bench_filter: None,
                 samples: None,
-                iterations: None,
                 warmup_duration: None,
                 threshold: None,
                 ci: false,
@@ -413,10 +405,6 @@ fn build_runner_env(workspace_root: &Path, run_config: &RunConfig) -> HashMap<St
 
     if let Some(samples) = run_config.samples {
         env.insert("SIMPLEBENCH_SAMPLES".to_string(), samples.to_string());
-    }
-
-    if let Some(iterations) = run_config.iterations {
-        env.insert("SIMPLEBENCH_ITERATIONS".to_string(), iterations.to_string());
     }
 
     if let Some(warmup_duration) = run_config.warmup_duration {

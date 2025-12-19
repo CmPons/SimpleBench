@@ -144,7 +144,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-simplebench"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -757,7 +757,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "simplebench-macros"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -768,7 +768,7 @@ dependencies = [
 
 [[package]]
 name = "simplebench-runtime"
-version = "2.0.0"
+version = "2.1.0"
 dependencies = [
  "affinity",
  "chrono",

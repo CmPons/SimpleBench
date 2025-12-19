@@ -55,7 +55,6 @@ pub struct BaselineData {
     pub samples: Vec<u128>,
     /// Comprehensive statistics calculated from samples
     pub statistics: crate::Statistics,
-    pub iterations: usize,
     #[serde(alias = "hostname")]
     pub machine_id: String,
 
@@ -94,7 +93,6 @@ impl BaselineData {
             timestamp: chrono::Utc::now().to_rfc3339(),
             samples,
             statistics,
-            iterations: result.iterations,
             machine_id,
             cpu_samples: result.cpu_samples.clone(),
             percentiles: Some(result.percentiles.clone()),
@@ -127,7 +125,6 @@ impl BaselineData {
             name: self.benchmark_name.clone(),
             module: self.module.clone(),
             percentiles,
-            iterations: self.iterations,
             samples: self.samples.len(),
             all_timings,
             cpu_samples: self.cpu_samples.clone(),
@@ -611,7 +608,6 @@ mod tests {
         BenchResult {
             name: name.to_string(),
             module: "test_module".to_string(),
-            iterations: 100,
             samples: 10,
             percentiles: Percentiles {
                 p50: Duration::from_millis(5),
@@ -635,7 +631,6 @@ mod tests {
         assert_eq!(baseline.benchmark_name, "test_bench");
         assert_eq!(baseline.module, "test_module");
         assert_eq!(baseline.machine_id, machine_id);
-        assert_eq!(baseline.iterations, 100);
         assert_eq!(baseline.statistics.sample_count, 10);
         assert_eq!(baseline.samples.len(), 10);
 

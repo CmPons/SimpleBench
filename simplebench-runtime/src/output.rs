@@ -422,7 +422,6 @@ mod tests {
         BenchResult {
             name: "test_bench".to_string(),
             module: "test_module".to_string(),
-            iterations: 100,
             samples: 10,
             percentiles: Percentiles {
                 p50: Duration::from_millis(5),
@@ -446,7 +445,6 @@ mod tests {
 
         assert_eq!(result.name, loaded_result.name);
         assert_eq!(result.module, loaded_result.module);
-        assert_eq!(result.iterations, loaded_result.iterations);
         assert_eq!(result.samples, loaded_result.samples);
     }
 
