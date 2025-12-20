@@ -566,9 +566,8 @@ fn spawn_benchmark_on_core(
         let status = child.wait();
 
         let result = match status {
-            Ok(s) if s.success() => serde_json::from_str::<BenchResult>(&stdout_content).map_err(
-                |e| format!("Failed to parse result: {}\nstdout: {}", e, stdout_content),
-            ),
+            Ok(s) if s.success() => serde_json::from_str::<BenchResult>(&stdout_content)
+                .map_err(|e| format!("Failed to parse result: {}\nstdout: {}", e, stdout_content)),
             Ok(s) => Err(format!("Benchmark failed with status: {}", s)),
             Err(e) => Err(format!("Failed to wait for benchmark: {}", e)),
         };
@@ -635,11 +634,8 @@ fn run_benchmarks_with_cores(
                 match *result {
                     Ok(ref bench_result) => {
                         // Process baseline comparison
-                        let comparison = process_single_result_baseline(
-                            bench_result,
-                            &baseline_manager,
-                            config,
-                        );
+                        let comparison =
+                            process_single_result_baseline(bench_result, &baseline_manager, config);
 
                         // Suspend progress bars while printing output
                         let bench_result = bench_result.clone();
