@@ -1,3 +1,10 @@
+# [2.2.0](https://github.com/CmPons/SimpleBench/compare/v2.1.1...v2.2.0) (2025-12-20)
+
+
+### Features
+
+* queue-based parallel scheduling and simplified warmup ([03afbe4](https://github.com/CmPons/SimpleBench/commit/03afbe4093873d0c80776f9968a9f7b24c75fd85))
+
 ## [2.1.1](https://github.com/CmPons/SimpleBench/compare/v2.1.0...v2.1.1) (2025-12-19)
 
 
