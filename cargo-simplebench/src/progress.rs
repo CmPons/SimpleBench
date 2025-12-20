@@ -185,6 +185,12 @@ impl BenchmarkProgress {
             state.bar.finish_and_clear();
         }
     }
+
+    /// Suspend progress bars while executing a closure.
+    /// This temporarily hides all bars, runs the closure, then restores them.
+    pub fn suspend<F: FnOnce()>(&self, f: F) {
+        self.multi.suspend(f);
+    }
 }
 
 impl Drop for BenchmarkProgress {

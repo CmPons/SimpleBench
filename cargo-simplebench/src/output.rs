@@ -205,6 +205,15 @@ pub fn print_new_baseline(benchmark_name: &str) {
     );
 }
 
+/// Print comparison result (handles both existing comparison and new baseline cases)
+pub fn print_comparison_result(comparison_result: &ComparisonResult) {
+    if let Some(ref comparison) = comparison_result.comparison {
+        print_comparison(comparison, &comparison_result.benchmark_name, comparison_result.is_regression);
+    } else {
+        print_new_baseline(&comparison_result.benchmark_name);
+    }
+}
+
 /// Print summary footer
 pub fn print_summary(comparisons: &[ComparisonResult], config: &ComparisonConfig) {
     let regressions = comparisons.iter().filter(|c| c.is_regression).count();

@@ -18,16 +18,12 @@ where
 {
     let start = Instant::now();
     let mut total_iterations = 0u64;
-    let mut batch_size = 1u64;
     let mut last_report = Instant::now();
     let target_ms = duration.as_millis() as u64;
 
     while start.elapsed() < duration {
-        for _ in 0..batch_size {
-            func();
-        }
-        total_iterations += batch_size;
-        batch_size *= 2;
+        func();
+        total_iterations += 1;
 
         // Emit progress every 100ms
         if last_report.elapsed() >= Duration::from_millis(100) {
@@ -205,17 +201,13 @@ where
 {
     let start = Instant::now();
     let mut total_iterations = 0u64;
-    let mut batch_size = 1u64;
     let mut last_report = Instant::now();
     let target_ms = duration.as_millis() as u64;
 
     while start.elapsed() < duration {
-        for _ in 0..batch_size {
-            let data = setup();
-            bench(data);
-        }
-        total_iterations += batch_size;
-        batch_size *= 2;
+        let data = setup();
+        bench(data);
+        total_iterations += 1;
 
         // Emit progress every 100ms
         if last_report.elapsed() >= Duration::from_millis(100) {
@@ -246,17 +238,13 @@ where
 {
     let start = Instant::now();
     let mut total_iterations = 0u64;
-    let mut batch_size = 1u64;
     let mut last_report = Instant::now();
     let target_ms = duration.as_millis() as u64;
 
     while start.elapsed() < duration {
-        for _ in 0..batch_size {
-            let data = setup();
-            bench(&data);
-        }
-        total_iterations += batch_size;
-        batch_size *= 2;
+        let data = setup();
+        bench(&data);
+        total_iterations += 1;
 
         // Emit progress every 100ms
         if last_report.elapsed() >= Duration::from_millis(100) {
